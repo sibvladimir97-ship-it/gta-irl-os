@@ -2,6 +2,7 @@
 """
 GTA IRL OS — Telegram Assistant Bot
 Groq AI (llama-3.3-70b) + Whisper (голосовые) + файлы OS
+В группах: отвечает только на @упоминания и реплаи на свои сообщения
 """
 
 import os
@@ -15,6 +16,7 @@ GROQ_API_KEY   = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL     = "llama-3.3-70b-versatile"
 GROQ_URL       = "https://api.groq.com/openai/v1/chat/completions"
 WHISPER_URL    = "https://api.groq.com/openai/v1/audio/transcriptions"
+BOT_USERNAME   = "gta_irl_assistant_bot"
 
 ROOT     = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SURVIVAL = os.path.join(ROOT, "modules", "survival-economy")
@@ -24,6 +26,40 @@ DAILY_DIR     = os.path.join(SURVIVAL, "daily")
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 chat_history = {}
+
+
+# ── Проверка: нужно ли отвечать ──────────────────────────────────────────────
+
+def should_respond(msg):
+    """В личке — всегда. В группе — только @упоминание или реплай на бота."""
+    # Личка
+    if msg.chat.type == "private":
+        return True, msg.text or ""
+
+    # Группа — реплай на сообщение бота
+    if msg.reply_to_message and msg.reply_to_message.from_user:
+        if msg.reply_to_message.from_user.username == BOT_USERNAME:
+            text = msg.text or ""
+            return True, text
+
+    # Группа — упоминание @username
+    mention = f"@{BOT_USERNAME}"
+    text = msg.text or msg.caption or ""
+    if mention.lower() in text.lower():
+        clean = text.replace(mention, "").strip()
+        return True, clean
+
+    return False, ""
+
+
+def should_respond_voice(msg):
+    """Голосовые в группе — только реплай на бота."""
+    if msg.chat.type == "private":
+        return True
+    if msg.reply_to_message and msg.reply_to_message.from_user:
+        if msg.reply_to_message.from_user.username == BOT_USERNAME:
+            return True
+    return False
 
 
 # ── Файлы системы ─────────────────────────────────────────────────────────────
@@ -40,8 +76,8 @@ def build_system_context():
     return f"""Ты — персональный ассистент GTA IRL OS, операционной системы жизни Владимира.
 Текущее время: {now}
 
-Отвечай на русском языке. Будь конкретным и честным. Если видишь проблему — говори прямо.
-Если пользователь говорит голосом — отвечай так же естественно, как в разговоре.
+Отвечай на русском языке. Будь конкретным и честным.
+Если пользователь говорит голосом — отвечай естественно, как в разговоре.
 
 ═══ ФИНАНСОВАЯ ЦЕЛЬ ═══
 {read_file(TARGET_FILE)}
@@ -182,18 +218,12 @@ def fmt_collapse(t, branches):
                       fmt_branches(branches), "", "─────────────────────", "", insight])
 
 
-# ── Whisper — транскрипция голосовых ─────────────────────────────────────────
+# ── Whisper ───────────────────────────────────────────────────────────────────
 
 def transcribe_voice(file_id):
-    """Скачивает голосовое из Telegram и транскрибирует через Groq Whisper."""
-    # Получаем путь к файлу
     file_info = bot.get_file(file_id)
     file_url  = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_info.file_path}"
-
-    # Скачиваем
     audio_data = requests.get(file_url).content
-
-    # Отправляем в Whisper
     r = requests.post(
         WHISPER_URL,
         headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
@@ -230,13 +260,13 @@ def ask_groq(user_id, user_message):
 def cmd_start(msg):
     bot.send_message(msg.chat.id,
         "👋 *GTA IRL OS — Ассистент*\n\n"
-        "Подключён к твоей OS. Понимаю текст и голосовые 🎤\n\n"
+        "В группе: упомяни меня `@gta_irl_assistant_bot` или ответь на моё сообщение.\n"
+        "Понимаю текст и голосовые 🎤\n\n"
         "/collapse — полный контекст\n"
         "/status — баланс и дефицит\n"
         "/branches — ветки\n"
         "/today — дневной фокус\n"
-        "/reset — сбросить историю\n\n"
-        "Или просто пиши / говори голосом.",
+        "/reset — сбросить историю",
         parse_mode="Markdown")
 
 @bot.message_handler(commands=["reset"])
@@ -269,32 +299,34 @@ def cmd_today(msg):
     bot.send_message(msg.chat.id, f"```\n{content}\n```", parse_mode="Markdown")
 
 
-# ── Голосовые сообщения ───────────────────────────────────────────────────────
-
 @bot.message_handler(content_types=["voice"])
 def handle_voice(msg):
-    thinking = bot.send_message(msg.chat.id, "🎤 Слушаю...")
+    if not should_respond_voice(msg):
+        return
+    thinking = bot.send_message(msg.chat.id, "🎤 Слушаю...", reply_to_message_id=msg.message_id)
     try:
         text = transcribe_voice(msg.voice.file_id)
         if not text:
-            bot.edit_message_text("❌ Не смог распознать голос.", msg.chat.id, thinking.message_id)
+            bot.edit_message_text("❌ Не смог распознать.", msg.chat.id, thinking.message_id)
             return
-        # Показываем что распознали
         bot.edit_message_text(f"🎤 _{text}_\n\n⏳", msg.chat.id, thinking.message_id, parse_mode="Markdown")
-        # Отвечаем через AI
         reply = ask_groq(msg.from_user.id, text)
         bot.edit_message_text(f"🎤 _{text}_\n\n{reply}", msg.chat.id, thinking.message_id, parse_mode="Markdown")
     except Exception as e:
         bot.edit_message_text(f"❌ Ошибка: {e}", msg.chat.id, thinking.message_id)
 
 
-# ── Текстовые сообщения ───────────────────────────────────────────────────────
-
-@bot.message_handler(func=lambda m: True)
+@bot.message_handler(func=lambda m: True, content_types=["text"])
 def handle_text(msg):
-    thinking = bot.send_message(msg.chat.id, "⏳")
+    respond, clean_text = should_respond(msg)
+    if not respond:
+        return
+    if not clean_text:
+        clean_text = "что ты можешь делать?"
+
+    thinking = bot.send_message(msg.chat.id, "⏳", reply_to_message_id=msg.message_id)
     try:
-        reply = ask_groq(msg.from_user.id, msg.text.strip())
+        reply = ask_groq(msg.from_user.id, clean_text)
         bot.edit_message_text(reply, msg.chat.id, thinking.message_id)
     except Exception as e:
         bot.edit_message_text(f"❌ Ошибка: {e}", msg.chat.id, thinking.message_id)
@@ -304,6 +336,7 @@ def handle_text(msg):
 
 if __name__ == "__main__":
     print(f"GTA IRL OS Bot запущен — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    print("Текст + голосовые через Groq Whisper")
+    print(f"Username: @{BOT_USERNAME}")
+    print("Группа: отвечает только на @упоминания и реплаи")
     print("Слушаю...")
     bot.infinity_polling()
