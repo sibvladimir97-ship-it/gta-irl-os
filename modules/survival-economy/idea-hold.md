@@ -2,15 +2,17 @@
 
 **Category:** Runtime
 
-Real ideas that are not competing for energy right now.
-Nothing is deleted. Everything has a review date.
-When review date arrives — evaluate against current module state and either activate or re-freeze.
+Идеи которые реальны но не конкурируют за энергию прямо сейчас.
+Ничего не удаляется. У всего есть дата пересмотра.
 
 ---
 
-| ID | Idea | Captured | Review by | Frozen reason |
-|----|------|----------|-----------|---------------|
-| ih-001 | GTA IRL OS as SaaS platform for others | 2026-06-25 | 2026-08-01 | Phase 3+ concept. Build for self first. Activate when 2+ external people ask. |
-| ih-002 | Elnur — larger content production contract | 2026-06-25 | 2026-07-01 | Post-crisis. Revisit when survival is stable. |
-| ih-003 | GitHub automation toolkit as portfolio / product | 2026-06-25 | 2026-07-05 | Build after Dani demo. Natural next portfolio piece. |
-| ih-004 | Dota Camp — re-engagement as team member | 2026-06-25 | 2026-07-15 | Requires initiative. Low signal now. Revisit if stability reached. |
+| ID | Идея | Зафиксировано | Пересмотр | Причина заморозки |
+|----|------|---------------|-----------|-------------------|
+| ih-001 | GTA IRL OS как SaaS платформа для других | 2026-06-25 | 2026-08-01 | Phase 3+. Сначала для себя. |
+| ih-002 | Ильнур — большой контракт на контент | 2026-06-25 | 2026-07-01 | После кризиса. |
+| ih-003 | GitHub автоматизация как портфолио | 2026-06-25 | 2026-07-05 | После демо Дане. |
+| ih-004 | Dota Camp — повторное вступление | 2026-06-25 | 2026-07-15 | Низкий сигнал сейчас. |
+| ih-005 | Telegram Mini App для GTA IRL OS | 2026-06-26 | 2026-07-01 | Реальная задача. После кризиса — первый приоритет фронтенда. |
+| ih-006 | Мультиагентная система (монтажёры, ассистент, ML, безопасность) | 2026-06-26 | 2026-08-01 | Phase 2. Архитектура понятна, строим после Phase 0. |
+| ih-007 | Автономный цикл разработки (self-improving loop) | 2026-06-26 | 2026-08-01 | Phase 3. Требует данных из Phase 0 и 1. |
