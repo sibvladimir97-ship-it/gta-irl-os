@@ -48,11 +48,14 @@ def line():    print(dim("─" * 60))
 
 # ── Parsers ────────────────────────────────────────────────────────────────────
 
-def parse_table_value(text, field):
+def parse_table_value(text, *fields):
     """Extract value from markdown table row: | Field | Value |"""
-    pattern = rf"\|\s*{re.escape(field)}\s*\|\s*(.+?)\s*\|"
-    m = re.search(pattern, text, re.IGNORECASE)
-    return m.group(1).strip() if m else None
+    for field in fields:
+        pattern = rf"\|\s*{re.escape(field)}\s*\|\s*(.+?)\s*\|"
+        m = re.search(pattern, text, re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+    return None
 
 
 def parse_number(s):
@@ -129,23 +132,23 @@ def parse_branches(path):
         branch_id = lines[0].strip()
         body = "\n".join(lines[1:])
 
-        status = parse_table_value(body, "Status") or "unknown"
+        status = parse_table_value(body, "Статус", "Status") or "unknown"
         status = re.sub(r"\*+", "", status).strip()
 
         branches.append({
             "id":              branch_id,
-            "name":            parse_table_value(body, "Name") or branch_id,
+            "name":            parse_table_value(body, "Название", "Name") or branch_id,
             "status":          status,
-            "layer":           parse_table_value(body, "Layer") or "—",
-            "expected_value":  parse_table_value(body, "Expected value") or "TBD",
-            "earliest_income": parse_table_value(body, "Earliest income") or "—",
-            "probability":     parse_table_value(body, "Probability") or "—",
-            "required_energy": parse_table_value(body, "Required energy") or "—",
-            "blocking":        parse_table_value(body, "Blocking factors") or "—",
-            "next_action":     parse_table_value(body, "Next action") or "—",
-            "next_action_by":  parse_table_value(body, "Next action by") or "—",
-            "frozen_reason":   parse_table_value(body, "Frozen reason") or None,
-            "strategic_value": parse_table_value(body, "Strategic value") or "—",
+            "layer":           parse_table_value(body, "Слой", "Layer") or "—",
+            "expected_value":  parse_table_value(body, "Ожидаемая сумма", "Expected value") or "TBD",
+            "earliest_income": parse_table_value(body, "Ближайший доход", "Earliest income") or "—",
+            "probability":     parse_table_value(body, "Вероятность", "Probability") or "—",
+            "required_energy": parse_table_value(body, "Требуемая энергия", "Required energy") or "—",
+            "blocking":        parse_table_value(body, "Блокеры", "Blocking factors") or "—",
+            "next_action":     parse_table_value(body, "Следующий шаг", "Next action") or "—",
+            "next_action_by":  parse_table_value(body, "Срок следующего шага", "Next action by") or "—",
+            "frozen_reason":   parse_table_value(body, "Причина заморозки", "Frozen reason") or None,
+            "strategic_value": parse_table_value(body, "Стратегическая ценность", "Strategic value") or "—",
         })
 
     return branches
@@ -293,25 +296,27 @@ def generate_insight(target, active, frozen):
 
 # ── Daily file ─────────────────────────────────────────────────────────────────
 
-def daily_path(today=None):
+def daily_path(today=None, daily_dir=DAILY_DIR):
     if today is None:
         today = date.today().isoformat()
-    return os.path.join(DAILY_DIR, f"{today}.md")
+    return os.path.join(daily_dir, f"{today}.md")
 
 
-def create_morning_focus(target, branches):
+def create_morning_focus(target, branches, today=None, daily_dir=DAILY_DIR, quiet=False):
     """Write today's DailyFocus template if it doesn't exist."""
-    today = date.today().isoformat()
-    path  = daily_path(today)
+    today = today or date.today().isoformat()
+    path = daily_path(today, daily_dir)
 
     if os.path.exists(path):
         content = open(path).read()
-        if "**Balance now:**" in content and "_____ THB" not in content:
-            print(green(f"  Today's file already complete: daily/{today}.md"))
-        else:
-            print(yellow(f"  Today's file already exists: daily/{today}.md"))
-            print(dim("  Edit it directly or run --evening to add the evening update."))
-        return
+        complete = "**Balance now:**" in content and "_____ THB" not in content
+        if not quiet:
+            if complete:
+                print(green(f"  Today's file already complete: daily/{today}.md"))
+            else:
+                print(yellow(f"  Today's file already exists: daily/{today}.md"))
+                print(dim("  Edit it directly or run --evening to add the evening update."))
+        return {"path": path, "created": False, "complete": complete}
 
     active = [b for b in branches if b["status"].lower() == "active"]
     frozen = [b for b in branches if b["status"].lower() == "frozen"]
@@ -361,11 +366,63 @@ def create_morning_focus(target, branches):
         f"**Next priorities:**\n"
     )
 
-    os.makedirs(DAILY_DIR, exist_ok=True)
-    with open(path, "w") as f:
+    os.makedirs(daily_dir, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
         f.write(content)
 
-    print(green(f"  Created: modules/survival-economy/daily/{today}.md"))
+    if not quiet:
+        print(green(f"  Created: modules/survival-economy/daily/{today}.md"))
+    return {"path": path, "created": True, "complete": False}
+
+
+def run_morning_cycle(
+    target_file=TARGET_FILE,
+    branches_file=BRANCHES_FILE,
+    daily_dir=DAILY_DIR,
+    today=None,
+):
+    """Run the real morning Daily Cycle and return a Russian Telegram report."""
+    today = today or date.today().isoformat()
+    target = parse_target(str(target_file))
+    branches = parse_branches(str(branches_file))
+
+    if not target:
+        raise RuntimeError("SurvivalTarget не найден")
+
+    active = [b for b in branches if b["status"].lower() == "active"]
+    active.sort(key=priority_score)
+    focus = create_morning_focus(
+        target,
+        branches,
+        today=today,
+        daily_dir=str(daily_dir),
+        quiet=True,
+    )
+
+    mission = (
+        active[0]["next_action"]
+        if active
+        else "Определить одну активную ветку и записать следующий шаг."
+    )
+    file_state = "создан" if focus["created"] else "уже существует"
+    mode = "КРИЗИС" if target["mode"] == "CRISIS" else target["mode"]
+
+    lines = [
+        f"🌅 Daily Cycle — {today}",
+        f"📍 Режим: {mode}",
+        f"💰 Баланс: {target['balance']:,.0f} THB",
+        f"📉 Дефицит: {target['deficit']:,.0f} THB",
+    ]
+    if target["days_remaining"] is not None:
+        lines.append(f"⏳ До дедлайна: {target['days_remaining']} дн.")
+    lines.extend(
+        [
+            "",
+            f"🎯 Миссия дня: {mission.rstrip('.')}.",
+            f"🗂 Дневной фокус {file_state}: daily/{today}.md",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def add_evening_update(target):

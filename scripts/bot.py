@@ -20,10 +20,15 @@ from urllib.request import Request, urlopen
 
 
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.daily_cycle import run_morning_cycle
+
+
 ENV_FILE = ROOT / ".env"
 INBOX_DIR = ROOT / "memory" / "inbox"
 TARGET_FILE = ROOT / "modules" / "survival-economy" / "target.md"
-BRANCHES_FILE = ROOT / "modules" / "survival-economy" / "branches.md"
 MODE = "local fallback / no AI API"
 
 
@@ -85,19 +90,6 @@ def system_status():
         "deadline": deadline,
         "gta_mode": gta_mode,
     }
-
-
-def mission_of_the_day():
-    """Use the active money branch as the personal local mission."""
-    text = read_text(BRANCHES_FILE)
-    for section in re.split(r"^###\s+", text, flags=re.MULTILINE)[1:]:
-        if (table_value(section, "Статус", "Status") or "").strip().lower() != "active":
-            continue
-        action = table_value(section, "Следующий шаг", "Next action")
-        if action:
-            return action.rstrip(".") + "."
-
-    return "Выбрать одно главное действие и завершить его до конца дня."
 
 
 def display_name(user):
@@ -171,6 +163,7 @@ def start_reply():
         "Команды:\n"
         "/start — помощь\n"
         "/help — помощь\n"
+        "/morning — запустить Daily Cycle\n"
         "/status — статус системы\n\n"
         "Напиши «Доброе утро», чтобы получить личную миссию дня."
     )
@@ -187,23 +180,38 @@ def status_reply():
     )
 
 
-def morning_reply():
+def morning_reply(cycle_runner=None):
+    cycle_runner = cycle_runner or run_morning_cycle
+    try:
+        cycle_result = cycle_runner()
+    except Exception as error:
+        print(
+            f"Daily Cycle error: {type(error).__name__}",
+            file=sys.stderr,
+        )
+        return (
+            "✅ Сообщение сохранено в память GTA IRL OS.\n\n"
+            "⚠️ Не удалось запустить Daily Cycle. "
+            "Проверь файлы target.md и branches.md, затем повтори /morning.\n\n"
+            f"⚙️ Текущий режим: {MODE}."
+        )
+
     return (
-        "✅ Событие «Доброе утро» сохранено в память GTA IRL OS.\n\n"
-        f"🎯 Личная миссия дня: {mission_of_the_day()}\n\n"
+        "✅ Событие сохранено в память GTA IRL OS.\n\n"
+        f"{cycle_result}\n\n"
         f"⚙️ Текущий режим: {MODE}."
     )
 
 
-def reply_for(message):
+def reply_for(message, cycle_runner=None):
     text = message_text(message).strip()
     command = text.split(maxsplit=1)[0].split("@", 1)[0].lower()
     if command in ("/start", "/help"):
         return start_reply()
     if command == "/status":
         return status_reply()
-    if normalize_text(text) == "доброе утро":
-        return morning_reply()
+    if command == "/morning" or normalize_text(text) == "доброе утро":
+        return morning_reply(cycle_runner)
     return (
         "✅ Сообщение сохранено в память GTA IRL OS.\n"
         "Напиши «Доброе утро» для миссии дня или используй /status."
@@ -282,12 +290,21 @@ def smoke_test():
     with tempfile.TemporaryDirectory() as temp_dir:
         path = save_message(sample, Path(temp_dir))
         saved = path.read_text(encoding="utf-8")
-        reply = reply_for(sample)
+        cycle_dir = Path(temp_dir) / "daily"
+        runner = lambda: run_morning_cycle(daily_dir=cycle_dir)
+        reply = reply_for(sample, cycle_runner=runner)
         assert "Доброе утро" in saved
-        assert "Личная миссия дня" in reply
+        assert "Миссия дня" in reply
+        assert list(cycle_dir.glob("*.md"))
         assert MODE in reply
         assert MODE in status_reply()
-    print("Smoke test passed: inbox save, morning mission, /status, local mode.")
+        error_reply = morning_reply(
+            lambda: (_ for _ in ()).throw(RuntimeError("test failure"))
+        )
+        assert "Не удалось запустить Daily Cycle" in error_reply
+    print(
+        "Smoke test passed: inbox save, Daily Cycle, /morning, error fallback."
+    )
 
 
 def main():
