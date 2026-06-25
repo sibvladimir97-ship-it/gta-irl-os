@@ -11,6 +11,7 @@ import os
 import re
 import sys
 import tempfile
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -30,6 +31,7 @@ ENV_FILE = ROOT / ".env"
 INBOX_DIR = ROOT / "memory" / "inbox"
 TARGET_FILE = ROOT / "modules" / "survival-economy" / "target.md"
 MODE = "local fallback / no AI API"
+MORNING_ACK = "Принял. Записал в память GTA IRL OS. Считаю миссию…"
 
 
 def load_env(path=ENV_FILE):
@@ -156,6 +158,24 @@ def normalize_text(text):
     return re.sub(r"[!.,?…]+$", "", text.strip().casefold())
 
 
+def message_command(message):
+    text = message_text(message).strip()
+    return text.split(maxsplit=1)[0].split("@", 1)[0].lower()
+
+
+def is_morning_message(message):
+    return (
+        message_command(message) == "/morning"
+        or normalize_text(message_text(message)) == "доброе утро"
+    )
+
+
+def log_timing(event, started_at):
+    elapsed_ms = (time.monotonic() - started_at) * 1000
+    now = datetime.now().astimezone().strftime("%H:%M:%S")
+    print(f"[{now}] {event} (+{elapsed_ms:.0f} мс)", flush=True)
+
+
 def start_reply():
     return (
         "👋 GTA IRL OS подключён.\n\n"
@@ -164,6 +184,7 @@ def start_reply():
         "/start — помощь\n"
         "/help — помощь\n"
         "/morning — запустить Daily Cycle\n"
+        "/ping — проверить соединение\n"
         "/status — статус системы\n\n"
         "Напиши «Доброе утро», чтобы получить личную миссию дня."
     )
@@ -180,7 +201,7 @@ def status_reply():
     )
 
 
-def morning_reply(cycle_runner=None):
+def morning_result_reply(cycle_runner=None):
     cycle_runner = cycle_runner or run_morning_cycle
     try:
         cycle_result = cycle_runner()
@@ -190,28 +211,27 @@ def morning_reply(cycle_runner=None):
             file=sys.stderr,
         )
         return (
-            "✅ Сообщение сохранено в память GTA IRL OS.\n\n"
             "⚠️ Не удалось запустить Daily Cycle. "
             "Проверь файлы target.md и branches.md, затем повтори /morning.\n\n"
             f"⚙️ Текущий режим: {MODE}."
         )
 
     return (
-        "✅ Событие сохранено в память GTA IRL OS.\n\n"
         f"{cycle_result}\n\n"
         f"⚙️ Текущий режим: {MODE}."
     )
 
 
-def reply_for(message, cycle_runner=None):
-    text = message_text(message).strip()
-    command = text.split(maxsplit=1)[0].split("@", 1)[0].lower()
+def reply_for(message):
+    command = message_command(message)
     if command in ("/start", "/help"):
         return start_reply()
+    if command == "/ping":
+        return "GTA IRL OS онлайн."
     if command == "/status":
         return status_reply()
-    if command == "/morning" or normalize_text(text) == "доброе утро":
-        return morning_reply(cycle_runner)
+    if is_morning_message(message):
+        return MORNING_ACK
     return (
         "✅ Сообщение сохранено в память GTA IRL OS.\n"
         "Напиши «Доброе утро» для миссии дня или используй /status."
@@ -242,12 +262,46 @@ class TelegramAPI:
         return self.call("sendMessage", chat_id=chat_id, text=text)
 
 
-def process_update(api, update):
+def send_morning_result(api, chat_id, cycle_runner, started_at):
+    log_timing("Daily Cycle запущен", started_at)
+    reply = morning_result_reply(cycle_runner)
+    try:
+        api.send_message(chat_id, reply)
+        log_timing("Результат Daily Cycle отправлен", started_at)
+    except (HTTPError, URLError, OSError, RuntimeError) as error:
+        print(
+            f"Не удалось отправить результат Daily Cycle: {type(error).__name__}",
+            file=sys.stderr,
+            flush=True,
+        )
+
+
+def process_update(api, update, cycle_runner=None, inbox_dir=INBOX_DIR):
     message = update.get("message")
     if not message:
-        return
-    save_message(message)
-    api.send_message(message["chat"]["id"], reply_for(message))
+        return None
+
+    started_at = time.monotonic()
+    log_timing("Сообщение получено", started_at)
+    save_message(message, inbox_dir)
+    log_timing("Сообщение сохранено в память", started_at)
+
+    chat_id = message["chat"]["id"]
+    if is_morning_message(message):
+        api.send_message(chat_id, MORNING_ACK)
+        log_timing("Быстрый ответ отправлен", started_at)
+        worker = threading.Thread(
+            target=send_morning_result,
+            args=(api, chat_id, cycle_runner or run_morning_cycle, started_at),
+            daemon=True,
+            name=f"daily-cycle-{update.get('update_id', 'message')}",
+        )
+        worker.start()
+        return worker
+
+    api.send_message(chat_id, reply_for(message))
+    log_timing("Ответ отправлен", started_at)
+    return None
 
 
 def run_bot(token):
@@ -281,29 +335,67 @@ def run_bot(token):
 
 def smoke_test():
     """Exercise persistence and replies without Telegram or real memory files."""
-    sample = {
-        "date": int(time.time()),
-        "from": {"id": 1, "first_name": "Тест"},
-        "chat": {"id": 2},
-        "text": "Доброе утро",
-    }
+    class FakeAPI:
+        def __init__(self):
+            self.messages = []
+
+        def send_message(self, chat_id, text):
+            self.messages.append((chat_id, text, time.monotonic()))
+
+    def sample_message(text):
+        return {
+            "date": int(time.time()),
+            "from": {"id": 1, "first_name": "Тест"},
+            "chat": {"id": 2},
+            "text": text,
+        }
+
     with tempfile.TemporaryDirectory() as temp_dir:
-        path = save_message(sample, Path(temp_dir))
-        saved = path.read_text(encoding="utf-8")
+        inbox_dir = Path(temp_dir) / "inbox"
         cycle_dir = Path(temp_dir) / "daily"
-        runner = lambda: run_morning_cycle(daily_dir=cycle_dir)
-        reply = reply_for(sample, cycle_runner=runner)
+        api = FakeAPI()
+
+        def slow_cycle():
+            assert api.messages[0][1] == MORNING_ACK
+            time.sleep(0.1)
+            return run_morning_cycle(daily_dir=cycle_dir)
+
+        start = time.monotonic()
+        worker = process_update(
+            api,
+            {"update_id": 1, "message": sample_message("Доброе утро")},
+            cycle_runner=slow_cycle,
+            inbox_dir=inbox_dir,
+        )
+        ack_elapsed = api.messages[0][2] - start
+        assert ack_elapsed < 0.1
+        assert worker is not None
+        worker.join(timeout=2)
+        assert not worker.is_alive()
+        saved = next(inbox_dir.glob("*.md")).read_text(encoding="utf-8")
         assert "Доброе утро" in saved
-        assert "Миссия дня" in reply
+        assert len(api.messages) == 2
+        assert "Миссия дня" in api.messages[1][1]
         assert list(cycle_dir.glob("*.md"))
-        assert MODE in reply
+        assert MODE in api.messages[1][1]
         assert MODE in status_reply()
-        error_reply = morning_reply(
+        error_reply = morning_result_reply(
             lambda: (_ for _ in ()).throw(RuntimeError("test failure"))
         )
         assert "Не удалось запустить Daily Cycle" in error_reply
+
+        ordinary_api = FakeAPI()
+        ordinary_start = time.monotonic()
+        process_update(
+            ordinary_api,
+            {"update_id": 2, "message": sample_message("Обычное сообщение")},
+            inbox_dir=inbox_dir,
+        )
+        assert time.monotonic() - ordinary_start < 0.1
+        assert "сохранено" in ordinary_api.messages[0][1]
+        assert reply_for(sample_message("/ping")) == "GTA IRL OS онлайн."
     print(
-        "Smoke test passed: inbox save, Daily Cycle, /morning, error fallback."
+        "Smoke test passed: fast save, instant ack, background Daily Cycle, /ping."
     )
 
 
