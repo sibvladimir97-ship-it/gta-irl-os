@@ -6,39 +6,39 @@
 
 ---
 
-## Current target
+## Текущая цель
 
-| Field | Value |
-|-------|-------|
+| Поле | Значение |
+|------|----------|
 | Goal amount | 23,000 THB |
 | Current balance | 200 THB |
 | Deficit | 22,800 THB |
 | Deadline | 2026-06-27 |
-| Deadline type | mixed (see obligations) |
-| Days remaining | 2 |
-| Deficit per day | 11,400 THB |
+| Тип дедлайна | смешанный (см. обязательства) |
+| Дней осталось | 2 |
+| Дефицит в день | 11,400 THB |
 
 ---
 
-## Obligations
+## Обязательства
 
-| Name | Amount (THB) | Due | Deadline type | Layer | Paid |
-|------|-------------|-----|---------------|-------|------|
-| Rent | 13,000 | 2026-06-27 | soft — negotiable | survival | no |
-| Motorbike | 5,000 | 2026-06-27 | hard | survival | no |
-| Internet | 2,000 | 2026-06-27 | hard | survival | no |
-| Utilities | ~3,000 | 2026-06-27 | soft | survival | no |
-
----
-
-## Next horizon
-
-| Name | Amount (THB) | Due | Layer |
-|------|-------------|-----|-------|
-| Border Run | ~4,500 | ~2026-07-10 | stability |
+| Название | Сумма (THB) | До | Тип дедлайна | Слой | Оплачено |
+|----------|------------|-----|--------------|------|----------|
+| Аренда | 13,000 | 2026-06-27 | soft — можно договориться | survival | no |
+| Мотобайк | 5,000 | 2026-06-27 | hard | survival | no |
+| Интернет | 2,000 | 2026-06-27 | hard | survival | no |
+| Коммуналка | ~3,000 | 2026-06-27 | soft | survival | no |
 
 ---
 
-## History
+## Следующий горизонт
 
-- 2026-06-25: Target created. Balance 200 THB. Crisis Mode activated.
+| Название | Сумма (THB) | До | Слой |
+|----------|------------|-----|------|
+| Пограничный переезд | ~4,500 | ~2026-07-10 | stability |
+
+---
+
+## История
+
+- 2026-06-25: Цель создана. Баланс 200 THB. Активирован режим кризиса.

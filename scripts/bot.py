@@ -2,22 +2,12 @@
 """
 GTA IRL OS — Telegram Assistant Bot
 Фаза 0: Ассистент подключён к файлам OS
-
-Команды:
-    /start    — приветствие
-    /status   — текущий дефицит и баланс
-    /branches — активные и замороженные ветки
-    /collapse — полный Context Collapse
-    /today    — дневной фокус на сегодня
-    /help     — список команд
 """
 
 import os
 import re
 import telebot
 from datetime import date, datetime
-
-# ── Config ─────────────────────────────────────────────────────────────────────
 
 TOKEN = "8980844354:AAFKX_wtKvLx1kgoWaZ6V9i8S48209GqpcM"
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -31,10 +21,14 @@ bot = telebot.TeleBot(TOKEN)
 
 # ── Парсеры ───────────────────────────────────────────────────────────────────
 
-def parse_table_value(text, field):
-    pattern = rf"\|\s*{re.escape(field)}\s*\|\s*(.+?)\s*\|"
-    m = re.search(pattern, text, re.IGNORECASE)
-    return m.group(1).strip() if m else None
+def parse_table_value(text, *fields):
+    """Ищет значение по нескольким вариантам названия поля."""
+    for field in fields:
+        pattern = rf"\|\s*{re.escape(field)}\s*\|\s*(.+?)\s*\|"
+        m = re.search(pattern, text, re.IGNORECASE)
+        if m:
+            return m.group(1).strip()
+    return None
 
 
 def parse_number(s):
@@ -49,6 +43,7 @@ def parse_target():
     if not os.path.exists(TARGET_FILE):
         return None
     text = open(TARGET_FILE).read()
+
     goal     = parse_number(parse_table_value(text, "Goal amount"))
     balance  = parse_number(parse_table_value(text, "Current balance"))
     deadline = parse_table_value(text, "Deadline")
@@ -94,16 +89,16 @@ def parse_branches():
         lines = section.strip().split("\n")
         branch_id = lines[0].strip()
         body = "\n".join(lines[1:])
-        status = parse_table_value(body, "Status") or "unknown"
+        status = parse_table_value(body, "Статус", "Status") or "unknown"
         status = re.sub(r"\*+", "", status).strip()
         branches.append({
             "id":              branch_id,
-            "name":            parse_table_value(body, "Name") or branch_id,
+            "name":            parse_table_value(body, "Название", "Name") or branch_id,
             "status":          status,
-            "earliest_income": parse_table_value(body, "Earliest income") or "—",
-            "blocking":        parse_table_value(body, "Blocking factors") or "—",
-            "next_action":     parse_table_value(body, "Next action") or "—",
-            "frozen_reason":   parse_table_value(body, "Frozen reason") or None,
+            "earliest_income": parse_table_value(body, "Ближайший доход", "Earliest income") or "—",
+            "blocking":        parse_table_value(body, "Блокеры", "Blocking factors") or "—",
+            "next_action":     parse_table_value(body, "Следующий шаг", "Next action") or "—",
+            "frozen_reason":   parse_table_value(body, "Причина заморозки", "Frozen reason") or None,
         })
     return branches
 
@@ -128,22 +123,22 @@ def build_status(t):
     lines = [
         f"{mode_icon} *РЕЖИМ: {mode_text}*",
         f"",
-        f"💰 Баланс:  `{t['balance']:,.0f} THB`",
-        f"🎯 Цель:    `{t['goal']:,.0f} THB`",
-        f"📉 Дефицит: `{t['deficit']:,.0f} THB`",
+        f"💰 Баланс:    `{t['balance']:,.0f} THB`",
+        f"🎯 Цель:      `{t['goal']:,.0f} THB`",
+        f"📉 Дефицит:   `{t['deficit']:,.0f} THB`",
     ]
 
     if t["days_remaining"] is not None:
         dr = t["days_remaining"]
         icon = "🔴" if dr <= 2 else "🟡" if dr <= 7 else "🟢"
-        lines.append(f"⏰ Дедлайн: {t['deadline']}  {icon} {dr} дн.")
+        lines.append(f"⏰ Дедлайн:   {t['deadline']}  {icon} {dr} дн.")
         if dr > 0 and t["deficit"] > 0:
             dpd = t["deficit"] / dr
             lines.append(f"📊 Нужно/день: `{dpd:,.0f} THB`")
 
     if t["obligations"]:
         lines.append("")
-        lines.append("*Неоплаченные обязательства:*")
+        lines.append("*Неоплачено:*")
         for ob in t["obligations"]:
             icon = "🔴" if "hard" in ob["type"].lower() else "🟡"
             lines.append(f"{icon} {ob['name']}: `{ob['amount']:,.0f} THB`  до {ob['due']}")
@@ -154,7 +149,6 @@ def build_status(t):
 def build_branches(branches):
     active = [b for b in branches if b["status"].lower() == "active"]
     frozen = [b for b in branches if b["status"].lower() == "frozen"]
-
     lines = []
 
     if active:
@@ -162,7 +156,7 @@ def build_branches(branches):
         for b in active:
             lines.append(f"")
             lines.append(f"● *{b['name']}*")
-            lines.append(f"  Следующий шаг: {b['next_action']}")
+            lines.append(f"  Шаг: {b['next_action']}")
             lines.append(f"  Доход: {b['earliest_income']}")
             if b["blocking"] and b["blocking"] != "—":
                 lines.append(f"  ⚠️ Блокер: {b['blocking']}")
@@ -180,7 +174,6 @@ def build_branches(branches):
 def build_collapse(t, branches):
     today = date.today().isoformat()
     now = datetime.now().strftime("%H:%M")
-
     active = [b for b in branches if b["status"].lower() == "active"]
 
     lines = [
@@ -197,17 +190,16 @@ def build_collapse(t, branches):
         f"",
     ]
 
-    # Инсайт
     if t:
         dr = t.get("days_remaining", 99)
         deficit = t.get("deficit", 0)
         if dr is not None and dr <= 2 and deficit > 0:
             dpd = deficit / max(dr, 1)
-            lines.append(f"💡 *ИНСАЙТ:* 48 часов. Нужно `{dpd:,.0f} THB/день`. Каждый час на счету.")
+            lines.append(f"💡 *Инсайт:* 48 часов. Нужно `{dpd:,.0f} THB/день`. Каждый час на счету.")
         elif not active:
-            lines.append("💡 *ИНСАЙТ:* Нет активных веток. Добавь хотя бы одну.")
+            lines.append("💡 *Инсайт:* Нет активных веток. Добавь хотя бы одну.")
         else:
-            lines.append("💡 *ИНСАЙТ:* Система в норме. Выполняй задачи и обновляй вечером.")
+            lines.append("💡 *Инсайт:* Система в норме. Выполняй и обновляй вечером.")
 
     return "\n".join(lines)
 
@@ -218,7 +210,7 @@ def build_collapse(t, branches):
 def cmd_start(msg):
     text = (
         "👋 *GTA IRL OS — Ассистент*\n\n"
-        "Я подключён к твоей персональной операционной системе.\n\n"
+        "Я подключён к твоей операционной системе.\n\n"
         "*Команды:*\n"
         "/status — баланс и дефицит\n"
         "/branches — активные и замороженные ветки\n"
@@ -272,7 +264,6 @@ def cmd_today(msg):
 @bot.message_handler(func=lambda m: True)
 def handle_text(msg):
     text = msg.text.strip().lower()
-
     if any(w in text for w in ["статус", "деньги", "дефицит", "баланс", "status"]):
         cmd_status(msg)
     elif any(w in text for w in ["ветк", "branch", "dani", "даня", "проект"]):
@@ -284,9 +275,7 @@ def handle_text(msg):
     else:
         bot.send_message(
             msg.chat.id,
-            "Используй /collapse чтобы увидеть состояние системы.\n"
-            "Или попробуй: /status /branches /today",
-            parse_mode="Markdown"
+            "Попробуй: /collapse /status /branches /today"
         )
 
 
@@ -294,6 +283,5 @@ def handle_text(msg):
 
 if __name__ == "__main__":
     print(f"GTA IRL OS Bot запущен — {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    print(f"Файлы: {SURVIVAL}")
     print("Слушаю сообщения...")
     bot.infinity_polling()

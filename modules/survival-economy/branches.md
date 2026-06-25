@@ -2,123 +2,123 @@
 
 **Category:** Runtime
 
-All income opportunities. Every branch is a first-class entity.
-Schema defined in `core/GLOSSARY.md`.
+Все источники дохода. Каждая ветка — первоклассная сущность.
+Схема определена в `core/GLOSSARY.md`.
 
-Priority score: `probability + required_energy + (days_to_income / 2)`
-Lower = higher priority. Normal Mode: max 3 active. Crisis Mode: max 1 active.
+Формула приоритета: `вероятность + энергия + (дней_до_дохода / 2)`
+Ниже = выше приоритет. Обычный режим: макс 3 активных. Кризис: макс 1 активная.
 
 ---
 
-## ACTIVE (Crisis Mode — 1 branch only)
+## АКТИВНЫЕ (Режим кризиса — только 1 ветка)
 
 ### dani-ai-agent
 
-| Field | Value |
-|-------|-------|
+| Поле | Значение |
+|------|----------|
 | ID | dani-ai-agent |
-| Name | Dani — Telegram channel monitoring agent |
-| Type | client |
-| Status | active |
-| Layer | survival |
-| Expected value | TBD — set after demo + negotiation |
-| Value confidence | unknown |
-| Earliest income | ~2026-06-30 if offer sent by 2026-06-26 |
-| Deadline | none hard-set |
-| Probability | 2 |
-| Required energy | 3 |
-| Required time (days) | 2–3 to build demo |
-| Dependencies | — |
-| Blocking factors | No offer sent. No price defined. No demo built. |
-| Strategic value | high |
-| Automation potential | high |
-| Synergies | gta-irl-os-build |
-| Next action | Build prototype Telegram monitoring agent |
-| Next action by | 2026-06-25 |
+| Название | Даня — агент мониторинга Telegram-каналов |
+| Тип | клиент |
+| Статус | active |
+| Слой | survival |
+| Ожидаемая сумма | TBD — определить после демо и переговоров |
+| Уверенность в сумме | unknown |
+| Ближайший доход | ~2026-06-30 если оффер отправлен до 2026-06-26 |
+| Дедлайн | не задан |
+| Вероятность | 2 |
+| Требуемая энергия | 3 |
+| Дней на выполнение | 2–3 на демо |
+| Зависимости | — |
+| Блокеры | Оффер не отправлен. Цена не определена. Демо не собрано. |
+| Стратегическая ценность | high |
+| Потенциал автоматизации | high |
+| Синергии | gta-irl-os-build |
+| Следующий шаг | Собрать прототип агента мониторинга Telegram |
+| Срок следующего шага | 2026-06-26 |
 
-**History**
-- 2026-06-25: Branch created. Confirmed can build. Core product: agent that connects to Telegram channels, parses content, detects copyright strikes. Path: build → understand pricing → send offer.
+**История**
+- 2026-06-25: Ветка создана. Даня спросил «сможешь собрать?» — подтверждено да. Продукт: агент подключается к Telegram-каналам, парсит контент, обнаруживает страйки. Путь: собрать → понять цены → отправить оффер.
 
 ---
 
-## FROZEN
+## ЗАМОРОЖЕНЫ
 
 ### elnur-instagram
 
-| Field | Value |
-|-------|-------|
+| Поле | Значение |
+|------|----------|
 | ID | elnur-instagram |
-| Name | Elnur — Instagram Close Friends content |
-| Type | freelance |
-| Status | frozen |
-| Layer | survival → stability |
-| Expected value | ~3,500 THB |
-| Earliest income | after completion + processing |
-| Probability | 2 |
-| Required energy | 4 |
-| Required time (days) | ~3 |
-| Blocking factors | Payment arrives after June 27 deadline |
-| Strategic value | low |
-| Next action | Revisit 2026-06-28 |
-| Frozen reason | Timeline incompatible with current crisis |
+| Название | Ильнур — контент для Instagram Close Friends |
+| Тип | фриланс |
+| Статус | frozen |
+| Слой | survival → stability |
+| Ожидаемая сумма | ~3,500 THB ($100) |
+| Ближайший доход | после завершения и обработки оплаты |
+| Вероятность | 2 |
+| Требуемая энергия | 4 |
+| Дней на выполнение | ~3 (20ч итого) |
+| Блокеры | Оплата придёт после дедлайна 27 июня |
+| Стратегическая ценность | low |
+| Следующий шаг | Пересмотреть 2026-06-28 |
+| Причина заморозки | Таймлайн несовместим с текущим кризисом |
 
 ---
 
 ### freelance-production
 
-| Field | Value |
-|-------|-------|
+| Поле | Значение |
+|------|----------|
 | ID | freelance-production |
-| Name | Freelance — shooting / editing / production |
-| Type | freelance |
-| Status | frozen |
-| Layer | survival |
-| Expected value | variable, low–medium |
-| Earliest income | same day if client found |
-| Probability | 3 |
-| Required energy | 3 |
-| Blocking factors | No active inbound request |
-| Strategic value | low |
-| Next action | Activate if dani-ai-agent stalls for 24h+ |
-| Frozen reason | Lower strategic value. Kept as fallback. |
+| Название | Фриланс — съёмка / монтаж / продакшн |
+| Тип | фриланс |
+| Статус | frozen |
+| Слой | survival |
+| Ожидаемая сумма | переменная, низкая–средняя |
+| Ближайший доход | в тот же день при наличии клиента |
+| Вероятность | 3 |
+| Требуемая энергия | 3 |
+| Блокеры | Нет активного входящего запроса |
+| Стратегическая ценность | low |
+| Следующий шаг | Активировать если dani-ai-agent застопорится на 24ч+ |
+| Причина заморозки | Ниже стратегическая ценность. Резерв. |
 
 ---
 
 ### new-ai-clients
 
-| Field | Value |
-|-------|-------|
+| Поле | Значение |
+|------|----------|
 | ID | new-ai-clients |
-| Name | New AI / Telegram automation clients — outbound |
-| Type | client |
-| Status | frozen |
-| Layer | growth |
-| Expected value | high (unknown) |
-| Earliest income | 2+ weeks minimum |
-| Blocking factors | No portfolio. Sales cycle incompatible with June 27. |
-| Strategic value | high |
-| Next action | Revisit 2026-06-28. Use Dani demo as first portfolio piece. |
-| Frozen reason | Sales cycle too long for current deadline |
+| Название | Новые AI / Telegram автоматизация — исходящие клиенты |
+| Тип | клиент |
+| Статус | frozen |
+| Слой | growth |
+| Ожидаемая сумма | высокая (неизвестна) |
+| Ближайший доход | минимум 2+ недели |
+| Блокеры | Нет портфолио. Цикл продажи несовместим с 27 июня. |
+| Стратегическая ценность | high |
+| Следующий шаг | Пересмотреть 2026-06-28. Демо Дани — первое портфолио. |
+| Причина заморозки | Цикл продажи слишком длинный для текущего дедлайна |
 
 ---
 
 ### dota-camp
 
-| Field | Value |
-|-------|-------|
+| Поле | Значение |
+|------|----------|
 | ID | dota-camp |
-| Name | Dota Camp |
-| Type | other |
-| Status | frozen |
-| Layer | stability |
-| Expected value | low |
-| Blocking factors | Not on current team. No active channel. |
-| Strategic value | low |
-| Next action | Monitor passively. |
-| Frozen reason | Not a reliable income signal |
+| Название | Dota Camp |
+| Тип | другое |
+| Статус | frozen |
+| Слой | stability |
+| Ожидаемая сумма | низкая |
+| Блокеры | Не в текущей команде. Нет активного канала. |
+| Стратегическая ценность | low |
+| Следующий шаг | Мониторить пассивно. |
+| Причина заморозки | Ненадёжный источник дохода |
 
 ---
 
-## Branch log
+## Лог веток
 
-- 2026-06-25: File created. 1 active (Crisis Mode), 4 frozen.
+- 2026-06-25: Файл создан. 1 активная (режим кризиса), 4 заморожены.
