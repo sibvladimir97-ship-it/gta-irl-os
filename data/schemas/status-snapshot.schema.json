@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gta-irl-os/status-snapshot",
+  "title": "StatusSnapshot",
+  "description": "What every module exports to the Context Collapse engine. One per module per day.",
+  "type": "object",
+  "required": ["module", "updated", "status", "headline", "key_metric", "next_action"],
+  "properties": {
+    "module": { "type": "string" },
+    "updated": { "type": "string", "format": "date" },
+    "status": {
+      "type": "string",
+      "enum": ["green", "yellow", "red"],
+      "description": "green = on track, yellow = attention needed, red = blocked or crisis"
+    },
+    "headline": {
+      "type": "string",
+      "description": "One sentence: what is happening in this module right now"
+    },
+    "key_metric": {
+      "type": "string",
+      "description": "The one number or fact that matters most right now"
+    },
+    "blocker": {
+      "oneOf": [{ "type": "string" }, { "type": "null" }]
+    },
+    "next_action": {
+      "type": "string",
+      "description": "One concrete step. Specific enough to do without further planning."
+    }
+  }
+}

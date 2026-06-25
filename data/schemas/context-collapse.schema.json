@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gta-irl-os/context-collapse",
+  "title": "ContextCollapse",
+  "description": "Daily compressed view of all module states. Input for Decide. Never a substitute for it.",
+  "type": "object",
+  "required": ["date", "mode", "snapshots", "top_branch", "insight"],
+  "properties": {
+    "date": { "type": "string", "format": "date" },
+    "mode": {
+      "type": "string",
+      "enum": ["normal", "crisis"]
+    },
+    "snapshots": {
+      "type": "array",
+      "items": { "$ref": "status-snapshot.schema.json" },
+      "description": "One StatusSnapshot per active module"
+    },
+    "top_branch": {
+      "type": "string",
+      "description": "Branch ID with lowest priority score — the single most important branch today"
+    },
+    "insight": {
+      "type": "string",
+      "description": "One observation the human might miss when looking at the data alone"
+    },
+    "decision": {
+      "oneOf": [{ "type": "string" }, { "type": "null" }],
+      "description": "Filled by the human after reading. Never pre-filled by the system."
+    }
+  }
+}

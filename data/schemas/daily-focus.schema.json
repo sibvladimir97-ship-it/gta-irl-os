@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gta-irl-os/daily-focus",
+  "title": "DailyFocus",
+  "description": "Created every morning. One per day. Append-only after creation.",
+  "type": "object",
+  "required": ["date", "mode", "active_branches", "tasks", "frozen_today"],
+  "properties": {
+    "date": { "type": "string", "format": "date" },
+    "mode": { "type": "string", "enum": ["normal", "crisis"] },
+    "deficit_today": {
+      "oneOf": [{ "type": "number" }, { "type": "null" }],
+      "description": "Current deficit from SurvivalTarget. Null when no active target."
+    },
+    "active_branches": {
+      "type": "array",
+      "items": { "type": "string" },
+      "maxItems": 3,
+      "description": "Branch IDs chosen for today. Max 3 in normal mode, 1 in crisis."
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["branch_id", "action", "done"],
+        "properties": {
+          "branch_id": { "type": "string" },
+          "action": { "type": "string" },
+          "done": { "type": "boolean" }
+        }
+      }
+    },
+    "frozen_today": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["what", "why"],
+        "properties": {
+          "what": { "type": "string" },
+          "why": { "type": "string" }
+        }
+      },
+      "description": "What is deliberately not being done today, and why"
+    },
+    "evening_update": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["balance_now", "progress", "corrections", "next_priorities"],
+          "properties": {
+            "balance_now": { "type": "number" },
+            "progress": { "type": "string" },
+            "what_didnt": { "type": "string" },
+            "blocker": { "oneOf": [{ "type": "string" }, { "type": "null" }] },
+            "corrections": { "type": "string" },
+            "next_priorities": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        { "type": "null" }
+      ]
+    }
+  }
+}

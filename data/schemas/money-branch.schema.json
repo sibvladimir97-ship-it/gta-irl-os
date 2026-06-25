@@ -1,0 +1,119 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "gta-irl-os/money-branch",
+  "title": "MoneyBranch",
+  "description": "Any idea, action, or opportunity that can produce income. First-class entity.",
+  "type": "object",
+  "required": [
+    "id", "name", "type", "status", "layer",
+    "probability", "required_energy", "required_time_days",
+    "next_action", "created", "updated"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$",
+      "description": "URL-safe slug, e.g. dani-ai-agent"
+    },
+    "name": { "type": "string" },
+    "type": {
+      "type": "string",
+      "enum": ["freelance", "client", "product", "passive", "other"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["active", "negotiation", "frozen", "closed", "won"]
+    },
+    "layer": {
+      "type": "string",
+      "enum": ["survival", "stability", "growth"]
+    },
+    "expected_value": {
+      "type": "number",
+      "minimum": 0,
+      "description": "THB, best estimate. 0 if unknown."
+    },
+    "value_confidence": {
+      "type": "string",
+      "enum": ["high", "medium", "low", "unknown"]
+    },
+    "earliest_income": {
+      "type": "string",
+      "format": "date",
+      "description": "When money could realistically arrive"
+    },
+    "deadline": {
+      "oneOf": [{ "type": "string", "format": "date" }, { "type": "null" }]
+    },
+    "probability": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "description": "1 = almost certain, 5 = very uncertain"
+    },
+    "required_energy": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5,
+      "description": "1 = light, 5 = full drain"
+    },
+    "required_time_days": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Active working days to complete"
+    },
+    "dependencies": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Other branch IDs or external factors"
+    },
+    "blocking_factors": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "strategic_value": {
+      "type": "string",
+      "enum": ["high", "medium", "low"]
+    },
+    "automation_potential": {
+      "type": "string",
+      "enum": ["high", "medium", "low", "none"]
+    },
+    "synergies": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Branch IDs this one amplifies"
+    },
+    "next_action": {
+      "type": "string",
+      "description": "Exactly one concrete action, not a plan"
+    },
+    "next_action_by": {
+      "oneOf": [{ "type": "string", "format": "date" }, { "type": "null" }]
+    },
+    "history": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/Event" }
+    },
+    "frozen_reason": {
+      "oneOf": [{ "type": "string" }, { "type": "null" }],
+      "description": "Required when status is frozen"
+    },
+    "created": { "type": "string", "format": "date" },
+    "updated": { "type": "string", "format": "date" }
+  },
+  "definitions": {
+    "Event": {
+      "type": "object",
+      "required": ["date", "type", "note"],
+      "properties": {
+        "date": { "type": "string", "format": "date-time" },
+        "type": {
+          "type": "string",
+          "enum": ["update", "action", "outcome", "decision", "block"]
+        },
+        "note": { "type": "string" }
+      }
+    }
+  }
+}
