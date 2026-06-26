@@ -52,14 +52,27 @@ OFFER_KEYWORDS = [
 
 # Чаты для мониторинга (добавляй username без @)
 MONITOR_CHATS = [
-    "freelancehunt_ru",
-    "python_jobs",
-    "ai_jobs_ru",
-    "tg_jobs",
-    "remote_jobs_ru",
-    "it_jobs_ru",
-    "freelance_russia",
-    "automation_jobs",
+    # Хабр Фриланс — реальные заказы на Python, боты, парсинг
+    "freelansim_ru",
+    # Фриланс заказы общие
+    "freelance_ru_chat",
+    "ru_python",
+    # AI и автоматизация
+    "ai_python_ru",
+    "chatgpt_ru",
+    "openai_ru",
+    # Telegram боты и разработка
+    "tgdev",
+    "botcreators",
+    # Удалённая работа
+    "remote_ru",
+    "digital_nomad_russia",
+    # YouTube / контент / монтаж
+    "youtube_ru_chat",
+    "videoeditors_ru",
+    # Общий фриланс чат
+    "freelance_chat_ru",
+    "it_freelance_ru",
 ]
 
 # ── Отправка в бот ────────────────────────────────────────────────────────────
