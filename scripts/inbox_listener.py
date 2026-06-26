@@ -16,13 +16,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from offer_store import get_offer
 from negotiator import (
     get_deal, save_deal, update_stage, add_message,
-    draft_first_message, list_deals, STAGE_LABELS
+    draft_first_message, list_deals, STAGE_LABELS,
+    update_brief_from_text, maybe_mark_brief_ready, brief_status,
 )
 from deal_pipeline import is_terminal_stage, stage_label
 from telethon import TelegramClient, events
 
-API_ID    = int(os.getenv("TELEGRAM_API_ID", "30611066"))
-API_HASH  = os.getenv("TELEGRAM_API_HASH", "86864ae4d512125ab1fcc930da6a6f5b")
+API_ID    = int(os.getenv("TELEGRAM_API_ID", "0"))
+API_HASH  = os.getenv("TELEGRAM_API_HASH", "")
 BOT_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 GROQ_KEY  = os.getenv("GROQ_API_KEY", "")
 GROQ_URL  = "https://api.groq.com/openai/v1/chat/completions"
@@ -213,9 +214,12 @@ async def handle_client_reply(sender_id: int, sender_name: str, text: str):
         update_stage(deal, "BRIEF_COLLECTING")
         stage = "BRIEF_COLLECTING"
 
-    # Извлекаем бюджет/дедлайн
-    deal = extract_info(text, deal)
+    # Обновляем brief и, если всё собрано, переводим к КП
+    update_brief_from_text(deal, text)
+    maybe_mark_brief_ready(deal)
     save_deal(deal)
+    stage = deal.get("stage", stage)
+    brief = brief_status(deal)
 
     current_stage_label = stage_label(stage)
     contact_name = deal["contact"].get("name", "Клиент")
@@ -228,6 +232,7 @@ async def handle_client_reply(sender_id: int, sender_name: str, text: str):
         f"_{text[:300]}_"
         + (f"\n\n💰 Бюджет: {deal['budget']}" if deal.get('budget') else "")
         + (f"\n⏰ Дедлайн: {deal['deadline']}" if deal.get('deadline') else "")
+        + ("\n✅ Brief полный — можно готовить КП." if brief["complete"] else "\n⚠️ Не хватает: " + ", ".join(brief["missing"]))
     )
 
     # Генерируем следующий вопрос

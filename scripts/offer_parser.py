@@ -21,8 +21,8 @@ from offer_store import create_offer, update_offer, validate_contact_url
 from deal_pipeline import is_terminal_stage
 from offer_scoring import score_offer, format_score
 
-API_ID    = int(os.getenv("TELEGRAM_API_ID", "30611066"))
-API_HASH  = os.getenv("TELEGRAM_API_HASH", "86864ae4d512125ab1fcc930da6a6f5b")
+API_ID    = int(os.getenv("TELEGRAM_API_ID", "0"))
+API_HASH  = os.getenv("TELEGRAM_API_HASH", "")
 BOT_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 GROQ_KEY  = os.getenv("GROQ_API_KEY", "")
 GROQ_URL  = "https://api.groq.com/openai/v1/chat/completions"
@@ -439,7 +439,10 @@ async def main():
         except:
             return
         # Ищем активную сделку
-        from negotiator import list_deals, get_deal, save_deal, update_stage, add_message, STAGE_LABELS
+        from negotiator import (
+            list_deals, get_deal, save_deal, update_stage, add_message, STAGE_LABELS,
+            update_brief_from_text, maybe_mark_brief_ready,
+        )
         deals = list_deals()
         matched = None
         for deal in deals:
@@ -455,6 +458,8 @@ async def main():
         if matched.get("stage") in ["FIRST_MESSAGE_SENT", "WAITING_REPLY"]:
             update_stage(matched, "CLIENT_REPLIED")
             update_stage(matched, "BRIEF_COLLECTING")
+        update_brief_from_text(matched, text)
+        maybe_mark_brief_ready(matched)
         # Уведомляем
         send_text(
             f"📨 *Ответ клиента*\nСделка `{deal_id}`\n👤 {sender_name}\n\n_{text[:300]}_"

@@ -246,8 +246,51 @@ def update_brief_from_text(deal: dict, text: str) -> dict:
 
     if changed:
         add_event(deal, "brief_updated", "Brief обновлён из сообщения клиента", changed)
+        maybe_mark_brief_ready(deal)
 
     return deal
+
+
+def brief_status(deal: dict) -> dict:
+    """Return collected/missing brief fields."""
+    ensure_deal_fields(deal)
+    brief = deal.get("brief") or {}
+    values = {
+        "scope": brief.get("scope") or deal.get("tz"),
+        "budget": deal.get("budget") or brief.get("budget"),
+        "deadline": deal.get("deadline") or brief.get("deadline"),
+    }
+    labels = {
+        "scope": "ТЗ / объём работы",
+        "budget": "бюджет",
+        "deadline": "дедлайн",
+    }
+    missing = [labels[key] for key, value in values.items() if not value]
+    return {
+        "complete": not missing,
+        "missing": missing,
+        "values": values,
+    }
+
+
+def maybe_mark_brief_ready(deal: dict) -> bool:
+    """Move deal to BRIEF_READY when local brief is complete."""
+    ensure_deal_fields(deal)
+    if deal.get("stage") not in ["CLIENT_REPLIED", "BRIEF_COLLECTING"]:
+        return False
+    status = brief_status(deal)
+    if not status["complete"]:
+        return False
+
+    old_stage = deal.get("stage")
+    move_deal(deal, "BRIEF_READY", reason="brief_complete")
+    add_event(deal, "stage_changed", f"Стадия: {stage_label(old_stage)} → {stage_label('BRIEF_READY')}", {
+        "from": old_stage,
+        "to": "BRIEF_READY",
+        "reason": "brief_complete",
+    })
+    add_event(deal, "brief_ready", "Brief полный: можно готовить КП", status["values"])
+    return True
 
 
 def add_message(deal: dict, direction: str, text: str) -> dict:
@@ -890,6 +933,7 @@ def format_deal_card(deal: dict) -> str:
     name = contact.get("name", "?")
     username = contact.get("username")
     contact_display = f"@{username}" if username else f"ID:{contact.get('user_id', '?')}"
+    brief_state = brief_status(deal)
 
     lines = [
         f"📋 *Сделка {deal['deal_id']}*",
@@ -905,6 +949,11 @@ def format_deal_card(deal: dict) -> str:
         lines.append(f"💰 Бюджет: {deal['budget']}")
     if deal.get("deadline"):
         lines.append(f"⏰ Дедлайн: {deal['deadline']}")
+    if deal["stage"] in ["CLIENT_REPLIED", "BRIEF_COLLECTING", "BRIEF_READY", "PROPOSAL_DRAFTED"]:
+        if brief_state["complete"]:
+            lines.append("🧾 Brief: полный")
+        else:
+            lines.append("🧾 Brief: не хватает — " + ", ".join(brief_state["missing"]))
     if deal.get("proposal"):
         proposal = deal["proposal"]
         lines.append(f"📋 КП: {proposal.get('status', 'draft')}")
@@ -940,29 +989,19 @@ def format_deal_card(deal: dict) -> str:
 def format_deal_brief(deal: dict) -> str:
     """Format collected brief fields and missing inputs."""
     ensure_deal_fields(deal)
-    brief = deal.get("brief") or {}
-    budget = deal.get("budget") or brief.get("budget")
-    deadline = deal.get("deadline") or brief.get("deadline")
-    scope = brief.get("scope") or deal.get("tz")
-
-    missing = []
-    if not scope:
-        missing.append("ТЗ / объём работы")
-    if not budget:
-        missing.append("бюджет")
-    if not deadline:
-        missing.append("дедлайн")
+    status = brief_status(deal)
+    values = status["values"]
 
     lines = [
         f"🧾 *Brief сделки {deal['deal_id']}*",
         f"Стадия: {stage_label(deal.get('stage'))}",
         "",
-        f"ТЗ: {scope or '—'}",
-        f"Бюджет: {budget or '—'}",
-        f"Дедлайн: {deadline or '—'}",
+        f"ТЗ: {values['scope'] or '—'}",
+        f"Бюджет: {values['budget'] or '—'}",
+        f"Дедлайн: {values['deadline'] or '—'}",
     ]
-    if missing:
-        lines.append("\n⚠️ Не хватает: " + ", ".join(missing))
+    if not status["complete"]:
+        lines.append("\n⚠️ Не хватает: " + ", ".join(status["missing"]))
         lines.append("Следующий шаг: уточнить недостающие вводные у клиента.")
     else:
         lines.append("\n✅ Brief достаточно полный. Можно готовить КП.")
