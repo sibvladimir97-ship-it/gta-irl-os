@@ -1,0 +1,42 @@
+{
+  "offer_id": "17e9266b",
+  "created_at": "2026-06-26T14:08:34.816809",
+  "status": "RESPONDED",
+  "raw": {
+    "sender_id": 8205807375,
+    "sender_username": "text_barwork",
+    "chat_username": "mari_vakansii",
+    "msg_id": 5783915,
+    "msg_url": "https://t.me/mari_vakansii/5783915",
+    "contact_url": "https://t.me/text_barwork"
+  },
+  "raw_text": "#ищу #копирайтер ❗Требуется копирайтер ❗\nОбязанности:\n- Мы присылаем вам фото/скан  , ваша задача переписать это в ворд файл. Тематика (обучение )\nОплата: от 15000 руб/заказ. Заказов от 3 до 10 в неделю.\n\nнапишите менеджеру @text_barwork",
+  "display": {
+    "chat_name": "Мари про вакансии — инфобизнес",
+    "sender_name": "Лиля",
+    "date": "26.06 14:03",
+    "keywords": [
+      "#ищу"
+    ],
+    "ai_score": null,
+    "score": {
+      "verdict": "не брать",
+      "reason": "риск: скан",
+      "risk": "high",
+      "risk_markers": [
+        "скан"
+      ],
+      "budget": "от 15000 руб",
+      "money_score": 2,
+      "complexity": "легко",
+      "skills": [],
+      "keywords": [
+        "#ищу"
+      ],
+      "urgent": false
+    },
+    "preview": "#ищу #копирайтер ❗Требуется копирайтер ❗\nОбязанности:\n- Мы присылаем вам фото/скан  , ваша задача переписать это в ворд файл. Тематика (обучение )\nОплата: от 15000 руб/заказ. Заказов от 3 до 10 в неделю.\n\nнапишите менеджеру @text_barwork"
+  },
+  "deal_id": "b2bada96",
+  "updated_at": "2026-06-26T14:08:39.445091"
+}

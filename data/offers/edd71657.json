@@ -1,0 +1,42 @@
+{
+  "offer_id": "edd71657",
+  "created_at": "2026-06-26T14:05:23.178383",
+  "status": "RESPONDED",
+  "raw": {
+    "sender_id": 8778258661,
+    "sender_username": "Producer_Olesya",
+    "chat_username": "mari_vakansii",
+    "msg_id": 5783798,
+    "msg_url": "https://t.me/mari_vakansii/5783798",
+    "contact_url": "https://t.me/Producer_Olesya"
+  },
+  "raw_text": "#ищу #дизайнера #сторисмейкер \n\nНужен сторисмейкер-дизайнер на медицинский проект, работа по гайд-лайну\n\nПортфолио присылайте в личные сообщения @Producer_Olesya",
+  "display": {
+    "chat_name": "Мари про вакансии — инфобизнес",
+    "sender_name": "Олеся Красова 🟥 Продюсер на миллион",
+    "date": "26.06 13:44",
+    "keywords": [
+      "#ищу"
+    ],
+    "ai_score": "⚡ Легко\n💰 уточнить\n⏱ не указан\n📌 не брать — нет информации о технических требованиях проекта для Владимира",
+    "score": {
+      "verdict": "уточнить",
+      "reason": "релевантно, но нужно узнать бюджет",
+      "risk": "normal",
+      "risk_markers": [],
+      "budget": "уточнить",
+      "money_score": 1,
+      "complexity": "легко",
+      "skills": [
+        "telegram"
+      ],
+      "keywords": [
+        "#ищу"
+      ],
+      "urgent": false
+    },
+    "preview": "#ищу #дизайнера #сторисмейкер \n\nНужен сторисмейкер-дизайнер на медицинский проект, работа по гайд-лайну\n\nПортфолио присылайте в личные сообщения @Producer_Olesya"
+  },
+  "deal_id": "1c3b6db0",
+  "updated_at": "2026-06-26T14:06:22.890857"
+}

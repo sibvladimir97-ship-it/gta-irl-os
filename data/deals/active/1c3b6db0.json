@@ -1,0 +1,95 @@
+{
+  "deal_id": "1c3b6db0",
+  "offer_id": "edd71657",
+  "created_at": "2026-06-26T14:06:22.889871",
+  "stage": "FIRST_MESSAGE_DRAFTED",
+  "contact": {
+    "name": "Олеся Красова 🟥 Продюсер на миллион",
+    "username": "Producer_Olesya",
+    "user_id": 8778258661,
+    "contact_url": "https://t.me/Producer_Olesya"
+  },
+  "source": {
+    "chat": "Мари про вакансии — инфобизнес",
+    "msg_url": "https://t.me/mari_vakansii/5783798"
+  },
+  "offer_text": "#ищу #дизайнера #сторисмейкер \n\nНужен сторисмейкер-дизайнер на медицинский проект, работа по гайд-лайну\n\nПортфолио присылайте в личные сообщения @Producer_Olesya",
+  "messages": [],
+  "notes": [],
+  "brief": {},
+  "proposal": null,
+  "payments": [],
+  "payment": {
+    "prepayment_status": "pending",
+    "prepayment_amount": null,
+    "prepayment_received_at": null,
+    "final_payment_status": "pending",
+    "final_payment_amount": null,
+    "final_payment_received_at": null
+  },
+  "execution": {
+    "mode": null,
+    "status": "not_started",
+    "planned_at": null,
+    "started_at": null,
+    "delivered_at": null
+  },
+  "followup": null,
+  "followups": [],
+  "events": [
+    {
+      "type": "deal_created",
+      "title": "Сделка создана",
+      "data": {
+        "offer_id": "edd71657",
+        "stage": "NEW_LEAD"
+      },
+      "timestamp": "2026-06-26T14:06:22.889921"
+    },
+    {
+      "type": "stage_changed",
+      "title": "Стадия: 🆕 Новый лид → 🎯 Решено откликаться",
+      "data": {
+        "from": "NEW_LEAD",
+        "to": "RESPOND_DECIDED"
+      },
+      "timestamp": "2026-06-26T14:06:23.255670"
+    },
+    {
+      "type": "stage_changed",
+      "title": "Стадия: 🎯 Решено откликаться → ✏️ Черновик отклика готов",
+      "data": {
+        "from": "RESPOND_DECIDED",
+        "to": "FIRST_MESSAGE_DRAFTED"
+      },
+      "timestamp": "2026-06-26T14:06:23.256172"
+    }
+  ],
+  "loss": null,
+  "budget": null,
+  "deadline": null,
+  "result": null,
+  "stage_history": [
+    {
+      "from": null,
+      "to": "NEW_LEAD",
+      "at": "2026-06-26T14:06:22.889871",
+      "reason": "created"
+    },
+    {
+      "from": "NEW_LEAD",
+      "to": "RESPOND_DECIDED",
+      "at": "2026-06-26T14:06:23.255629",
+      "reason": "manual_update"
+    },
+    {
+      "from": "RESPOND_DECIDED",
+      "to": "FIRST_MESSAGE_DRAFTED",
+      "at": "2026-06-26T14:06:23.256149",
+      "reason": "manual_update"
+    }
+  ],
+  "next_action": "Проверить черновик и отправить только после подтверждения.",
+  "updated_at": "2026-06-26T14:06:23.256159",
+  "draft": "Добрый день! Увидел вашу заявку, готов взяться. Вакансия ещё актуальна?"
+}

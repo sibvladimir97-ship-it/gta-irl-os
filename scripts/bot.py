@@ -13,6 +13,24 @@ import subprocess
 import telebot
 from datetime import date, datetime
 
+
+def dict_to_keyboard(d):
+    """Конвертирует dict {'inline_keyboard': [[...]]} в telebot объект."""
+    if d is None:
+        return None
+    if isinstance(d, telebot.types.InlineKeyboardMarkup):
+        return d
+    kb = telebot.types.InlineKeyboardMarkup()
+    for row in d.get("inline_keyboard", []):
+        buttons = []
+        for btn in row:
+            buttons.append(telebot.types.InlineKeyboardButton(
+                text=btn["text"],
+                callback_data=btn.get("callback_data")
+            ))
+        kb.row(*buttons)
+    return kb
+
 # Импортируем воронку
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -139,20 +157,17 @@ def deal_keyboard(deal: dict):
 
 def send_deal_card(chat_id, deal: dict, message_id=None):
     text = format_deal_card(deal)
-    keyboard = deal_keyboard(deal)
+    keyboard = dict_to_keyboard(deal_keyboard(deal))
     if message_id:
         bot.edit_message_text(
-            text,
-            chat_id,
-            message_id,
+            text, chat_id, message_id,
             parse_mode="Markdown",
             reply_markup=keyboard,
             disable_web_page_preview=True,
         )
     else:
         bot.send_message(
-            chat_id,
-            text,
+            chat_id, text,
             parse_mode="Markdown",
             reply_markup=keyboard,
             disable_web_page_preview=True,
@@ -975,37 +990,29 @@ def handle_callback(call):
         bot.send_message(chat_id, f"📤 Оффер `{offer_id}` — *в делегирование*", parse_mode="Markdown")
 
     elif action == "respond":
-        # Создаём сделку и генерируем черновик
         bot.answer_callback_query(call.id, "⏳ Генерирую черновик...")
         deal = create_deal(offer)
         update_offer(offer_id, status="RESPONDED", deal_id=deal["deal_id"])
-        update_stage(deal, "RESPOND_DECIDED")
         update_stage(deal, "FIRST_MESSAGE_DRAFTED")
 
         draft = draft_first_message(deal)
-
-        # Кнопки подтверждения
-        keyboard = {
-            "inline_keyboard": [[
-                {"text": "✅ Отправить", "callback_data": f"send_draft:{deal['deal_id']}:{offer_id}"},
-                {"text": "✏️ Редактировать", "callback_data": f"edit_draft:{deal['deal_id']}"},
-            ], [
-                {"text": "❌ Отменить", "callback_data": f"cancel_draft:{deal['deal_id']}"},
-            ]]
-        }
-
-        # Сохраняем черновик в сделку
         deal["draft"] = draft
         save_deal(deal)
+
+        # Строим клавиатуру через telebot объекты
+        kb = telebot.types.InlineKeyboardMarkup()
+        kb.row(
+            telebot.types.InlineKeyboardButton("✅ Отправить", callback_data=f"send_draft:{deal['deal_id']}:{offer_id}"),
+            telebot.types.InlineKeyboardButton("❌ Отменить", callback_data=f"cancel_draft:{deal['deal_id']}"),
+        )
 
         bot.edit_message_reply_markup(chat_id, msg_id, reply_markup=None)
         bot.send_message(
             chat_id,
-            f"✏️ *Черновик отклика* (сделка `{deal['deal_id']}`)\n\n_{draft}_\n\nОтправить?",
+            f"✏️ *Черновик отклика*\nСделка `{deal['deal_id']}`\n\n{draft}\n\nОтправить клиенту?",
             parse_mode="Markdown",
-            reply_markup=keyboard
+            reply_markup=kb
         )
-        send_deal_card(chat_id, deal)
 
     elif action == "send_draft":
         parts = offer_id.split(":", 1)

@@ -1,0 +1,95 @@
+{
+  "deal_id": "b2bada96",
+  "offer_id": "17e9266b",
+  "created_at": "2026-06-26T14:08:39.444153",
+  "stage": "FIRST_MESSAGE_DRAFTED",
+  "contact": {
+    "name": "Лиля",
+    "username": "text_barwork",
+    "user_id": 8205807375,
+    "contact_url": "https://t.me/text_barwork"
+  },
+  "source": {
+    "chat": "Мари про вакансии — инфобизнес",
+    "msg_url": "https://t.me/mari_vakansii/5783915"
+  },
+  "offer_text": "#ищу #копирайтер ❗Требуется копирайтер ❗\nОбязанности:\n- Мы присылаем вам фото/скан  , ваша задача переписать это в ворд файл. Тематика (обучение )\nОплата: от 15000 руб/заказ. Заказов от 3 до 10 в неделю.\n\nнапишите менеджеру @text_barwork",
+  "messages": [],
+  "notes": [],
+  "brief": {},
+  "proposal": null,
+  "payments": [],
+  "payment": {
+    "prepayment_status": "pending",
+    "prepayment_amount": null,
+    "prepayment_received_at": null,
+    "final_payment_status": "pending",
+    "final_payment_amount": null,
+    "final_payment_received_at": null
+  },
+  "execution": {
+    "mode": null,
+    "status": "not_started",
+    "planned_at": null,
+    "started_at": null,
+    "delivered_at": null
+  },
+  "followup": null,
+  "followups": [],
+  "events": [
+    {
+      "type": "deal_created",
+      "title": "Сделка создана",
+      "data": {
+        "offer_id": "17e9266b",
+        "stage": "NEW_LEAD"
+      },
+      "timestamp": "2026-06-26T14:08:39.444203"
+    },
+    {
+      "type": "stage_changed",
+      "title": "Стадия: 🆕 Новый лид → 🎯 Решено откликаться",
+      "data": {
+        "from": "NEW_LEAD",
+        "to": "RESPOND_DECIDED"
+      },
+      "timestamp": "2026-06-26T14:08:39.445530"
+    },
+    {
+      "type": "stage_changed",
+      "title": "Стадия: 🎯 Решено откликаться → ✏️ Черновик отклика готов",
+      "data": {
+        "from": "RESPOND_DECIDED",
+        "to": "FIRST_MESSAGE_DRAFTED"
+      },
+      "timestamp": "2026-06-26T14:08:39.446045"
+    }
+  ],
+  "loss": null,
+  "budget": null,
+  "deadline": null,
+  "result": null,
+  "stage_history": [
+    {
+      "from": null,
+      "to": "NEW_LEAD",
+      "at": "2026-06-26T14:08:39.444153",
+      "reason": "created"
+    },
+    {
+      "from": "NEW_LEAD",
+      "to": "RESPOND_DECIDED",
+      "at": "2026-06-26T14:08:39.445502",
+      "reason": "manual_update"
+    },
+    {
+      "from": "RESPOND_DECIDED",
+      "to": "FIRST_MESSAGE_DRAFTED",
+      "at": "2026-06-26T14:08:39.446021",
+      "reason": "manual_update"
+    }
+  ],
+  "next_action": "Проверить черновик и отправить только после подтверждения.",
+  "updated_at": "2026-06-26T14:08:39.446030",
+  "draft": "Добрый день! Увидел вашу заявку, готов взяться. Вакансия ещё актуальна?"
+}

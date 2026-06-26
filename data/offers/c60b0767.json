@@ -1,0 +1,39 @@
+{
+  "offer_id": "c60b0767",
+  "created_at": "2026-06-26T14:10:06.762430",
+  "status": "NEW",
+  "raw": {
+    "sender_id": 284379,
+    "sender_username": "playground88",
+    "chat_username": "mari_vakansii",
+    "msg_id": 5783743,
+    "msg_url": "https://t.me/mari_vakansii/5783743",
+    "contact_url": "https://t.me/playground88"
+  },
+  "raw_text": "**#ищу**** ****#техспец**** ****#instagram**** ****#помощь**** **\nИщу специалиста, кто обладает экспертизой восстановления деактивированного аккаунта instagram. \nКонтакты для отклика: @playground88",
+  "display": {
+    "chat_name": "Мари про вакансии — инфобизнес",
+    "sender_name": "Kirill",
+    "date": "26.06 13:36",
+    "keywords": [
+      "#ищу"
+    ],
+    "ai_score": null,
+    "score": {
+      "verdict": "уточнить",
+      "reason": "нужно понять, есть ли техническая задача",
+      "risk": "normal",
+      "risk_markers": [],
+      "budget": "уточнить",
+      "money_score": 1,
+      "complexity": "легко",
+      "skills": [],
+      "keywords": [
+        "#ищу"
+      ],
+      "urgent": false
+    },
+    "preview": "**#ищу**** ****#техспец**** ****#instagram**** ****#помощь**** **\nИщу специалиста, кто обладает экспертизой восстановления деактивированного аккаунта instagram. \nКонтакты для отклика: @playground88"
+  },
+  "deal_id": null
+}
