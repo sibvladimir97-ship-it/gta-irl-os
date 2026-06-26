@@ -22,6 +22,7 @@ from negotiator import (
     format_deal_card, get_deal, save_deal, list_deals, prepare_proposal,
     record_prepayment, plan_execution, start_execution, mark_delivered,
     record_final_payment, pipeline_summary, money_summary,
+    prepare_followup, mark_followup_sent, list_followup_candidates,
 )
 from deal_pipeline import is_terminal_stage, stage_label
 
@@ -44,6 +45,7 @@ chat_history = {}
 
 DEAL_ACTIONS = {
     "WAITING_REPLY": [
+        ("✍️ Follow-up", "prepare_followup"),
         ("👻 Клиент пропал", "CLIENT_GHOSTED"),
         ("🪦 Закрыть lost", "CLOSED_LOST"),
     ],
@@ -53,6 +55,7 @@ DEAL_ACTIONS = {
         ("❌ Отказаться", "REJECTED"),
     ],
     "BRIEF_COLLECTING": [
+        ("✍️ Follow-up", "prepare_followup"),
         ("✅ ТЗ собрано", "BRIEF_READY"),
         ("👻 Клиент пропал", "CLIENT_GHOSTED"),
         ("❌ Отказаться", "REJECTED"),
@@ -73,6 +76,7 @@ DEAL_ACTIONS = {
         ("👻 Клиент пропал", "CLIENT_GHOSTED"),
     ],
     "PREPAYMENT_WAITING": [
+        ("✍️ Follow-up", "prepare_followup"),
         ("💰 Предоплата получена", "record_prepayment"),
         ("👻 Клиент пропал", "CLIENT_GHOSTED"),
         ("🪦 Закрыть lost", "CLOSED_LOST"),
@@ -95,6 +99,7 @@ DEAL_ACTIONS = {
         ("🏁 Закрыть успешно", "record_final_payment"),
     ],
     "FINAL_PAYMENT_WAITING": [
+        ("✍️ Follow-up", "prepare_followup"),
         ("💰 Доплата получена", "record_final_payment"),
         ("🪦 Закрыть lost", "CLOSED_LOST"),
     ],
@@ -105,6 +110,7 @@ DEAL_ACTIONS = {
         ("🪦 Закрыть lost", "CLOSED_LOST"),
     ],
     "CLIENT_GHOSTED": [
+        ("✍️ Follow-up", "prepare_followup"),
         ("⏳ Вернуть в ожидание", "WAITING_REPLY"),
         ("🪦 Закрыть lost", "CLOSED_LOST"),
     ],
@@ -433,6 +439,7 @@ def cmd_start(msg):
         "/deal ID — карточка сделки\n"
         "/pipeline — дашборд воронки\n"
         "/money — деньги по сделкам\n"
+        "/followups — кого пора пнуть\n"
         "/reset — сбросить историю",
         parse_mode="Markdown")
 
@@ -576,6 +583,22 @@ def cmd_money(msg):
     bot.send_message(msg.chat.id, "\n".join(lines), parse_mode="Markdown")
 
 
+@bot.message_handler(commands=["followups"])
+def cmd_followups(msg):
+    deals = list_followup_candidates()
+    if not deals:
+        bot.send_message(msg.chat.id, "Follow-up кандидатов нет. Никого пинать не надо.")
+        return
+
+    lines = ["✉️ *Follow-up кандидаты*"]
+    for deal in deals[:10]:
+        contact = deal.get("contact", {})
+        name = contact.get("name") or contact.get("username") or "клиент"
+        lines.append(f"`{deal['deal_id']}` — {stage_label(deal['stage'])} — {name}")
+    lines.append("\nОткрыть карточку: `/deal ID`")
+    bot.send_message(msg.chat.id, "\n".join(lines), parse_mode="Markdown")
+
+
 @bot.message_handler(content_types=["voice"])
 def handle_voice(msg):
     if not should_respond_voice(msg):
@@ -679,6 +702,48 @@ def handle_callback(call):
                 )
             else:
                 bot.send_message(chat_id, f"❌ Ошибка отправки КП: {result.stderr[:200]}")
+                return
+
+        elif next_stage == "prepare_followup":
+            try:
+                deal = prepare_followup(deal)
+                bot.answer_callback_query(call.id, "✍️ Follow-up готов")
+                followup_text = (deal.get("followup") or {}).get("text") or deal.get("draft", "")
+                if followup_text:
+                    bot.send_message(
+                        chat_id,
+                        f"✉️ Черновик follow-up для сделки {deal_id}:\n\n{followup_text}\n\nОтправить клиенту?",
+                        reply_markup={
+                            "inline_keyboard": [[
+                                {"text": "📨 Отправить follow-up", "callback_data": f"deal:send_followup:{deal_id}"},
+                            ]]
+                        },
+                        disable_web_page_preview=True,
+                    )
+            except Exception as e:
+                bot.answer_callback_query(call.id, "❌ Не смог подготовить follow-up")
+                bot.send_message(chat_id, f"❌ Не смог подготовить follow-up: {e}")
+                return
+
+        elif next_stage == "send_followup":
+            followup = deal.get("followup") or {}
+            followup_text = followup.get("text") or deal.get("draft")
+            if not followup_text:
+                bot.answer_callback_query(call.id, "❌ Follow-up не найден")
+                bot.send_message(chat_id, "❌ В сделке нет черновика follow-up. Сначала нажми «Follow-up».")
+                return
+
+            bot.answer_callback_query(call.id, "📨 Отправляю follow-up...")
+            result = send_client_message(deal, followup_text)
+            if result.returncode == 0:
+                mark_followup_sent(deal, followup_text)
+                bot.send_message(
+                    chat_id,
+                    f"✅ Follow-up отправлен клиенту по сделке `{deal_id}`.",
+                    parse_mode="Markdown",
+                )
+            else:
+                bot.send_message(chat_id, f"❌ Ошибка отправки follow-up: {result.stderr[:200]}")
                 return
 
         elif next_stage == "record_prepayment":

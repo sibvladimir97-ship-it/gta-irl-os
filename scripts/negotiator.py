@@ -47,6 +47,8 @@ def ensure_deal_fields(deal: dict) -> dict:
         "started_at": None,
         "delivered_at": None,
     })
+    deal.setdefault("followup", None)
+    deal.setdefault("followups", [])
     return deal
 
 # ── CRUD сделок ───────────────────────────────────────────────────────────────
@@ -89,6 +91,8 @@ def create_deal(offer: dict) -> dict:
             "started_at": None,
             "delivered_at": None,
         },
+        "followup":   None,
+        "followups":  [],
         "budget":     None,
         "deadline":   None,
         "result":     None,
@@ -202,6 +206,24 @@ def money_summary(deals=None):
     return totals
 
 
+def needs_followup(deal: dict) -> bool:
+    """Return true when a deal is waiting on the client or money."""
+    ensure_deal_fields(deal)
+    return deal.get("stage") in [
+        "WAITING_REPLY",
+        "BRIEF_COLLECTING",
+        "PREPAYMENT_WAITING",
+        "FINAL_PAYMENT_WAITING",
+        "CLIENT_GHOSTED",
+    ]
+
+
+def list_followup_candidates(deals=None):
+    """List active deals that can benefit from a follow-up draft."""
+    deals = deals if deals is not None else list_deals()
+    return [deal for deal in deals if needs_followup(deal)]
+
+
 # ── AI черновик ───────────────────────────────────────────────────────────────
 
 def draft_first_message(deal: dict) -> str:
@@ -262,6 +284,114 @@ def draft_offer(deal: dict, budget: str, deadline: str, scope: str) -> str:
         return r.json()["choices"][0]["message"]["content"]
     except:
         return f"Стоимость работы: {budget}\nСрок выполнения: {deadline}\nРаботаю по предоплате 50%."
+
+
+def local_followup_text(deal: dict) -> str:
+    """Deterministic local follow-up draft by stage."""
+    ensure_deal_fields(deal)
+    stage = deal.get("stage")
+    contact_name = deal.get("contact", {}).get("name") or ""
+    hello = f"{contact_name}, добрый день!" if contact_name else "Добрый день!"
+
+    if stage == "WAITING_REPLY":
+        return f"{hello} Подскажите, пожалуйста, задача ещё актуальна? Готов обсудить детали и следующий шаг."
+    if stage == "BRIEF_COLLECTING":
+        return f"{hello} Чтобы точно оценить задачу, уточните, пожалуйста, объём работы, бюджет и желаемый срок."
+    if stage == "PREPAYMENT_WAITING":
+        return f"{hello} Подскажите, пожалуйста, когда сможете внести предоплату, чтобы я зафиксировал слот и начал работу?"
+    if stage == "FINAL_PAYMENT_WAITING":
+        return f"{hello} Работа со своей стороны сдана. Подскажите, пожалуйста, когда удобно закрыть финальную оплату?"
+    if stage == "CLIENT_GHOSTED":
+        return f"{hello} Возвращаюсь по задаче. Если она ещё актуальна — напишите, пожалуйста, и продолжим с текущего места."
+    return f"{hello} Подскажите, пожалуйста, какой следующий шаг по задаче?"
+
+
+def draft_followup(deal: dict) -> str:
+    """Generate a follow-up draft. Does not send it."""
+    ensure_deal_fields(deal)
+    fallback = local_followup_text(deal)
+
+    if not GROQ_KEY:
+        return fallback
+
+    messages_history = "\n".join(
+        f"{'Я' if m.get('direction') == 'outgoing' else 'Клиент'}: {m.get('text', '')}"
+        for m in deal.get("messages", [])[-8:]
+    )
+    try:
+        r = requests.post(
+            GROQ_URL,
+            headers={"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"},
+            json={
+                "model": "llama-3.3-70b-versatile",
+                "messages": [
+                    {"role": "system", "content": """Ты пишешь короткий follow-up клиенту от имени Владимира.
+Правила:
+- русский язык
+- 1-2 предложения
+- вежливо и спокойно
+- без давления
+- не обещай лишнего
+- цель: вернуть сделку к следующему шагу"""},
+                    {"role": "user", "content": (
+                        f"Стадия сделки: {deal.get('stage')}\n"
+                        f"Задача: {deal.get('offer_text', '')[:500]}\n"
+                        f"История:\n{messages_history}\n\n"
+                        "Напиши follow-up."
+                    )},
+                ],
+                "max_tokens": 120,
+            },
+            timeout=12,
+        )
+        if r.status_code == 429:
+            return fallback
+        return r.json()["choices"][0]["message"]["content"]
+    except:
+        return fallback
+
+
+def prepare_followup(deal: dict) -> dict:
+    """Save a follow-up draft into the deal. Does not send it."""
+    ensure_deal_fields(deal)
+    text = draft_followup(deal)
+    now = datetime.utcnow().isoformat()
+    deal["followup"] = {
+        "text": text,
+        "stage": deal.get("stage"),
+        "status": "draft",
+        "created_at": now,
+    }
+    deal["followups"].append(deal["followup"])
+    deal["draft"] = text
+    save_deal(deal)
+    return deal
+
+
+def mark_followup_sent(deal: dict, text: str) -> dict:
+    """Mark last follow-up as sent and log outgoing message."""
+    ensure_deal_fields(deal)
+    now = datetime.utcnow().isoformat()
+    followup = deal.get("followup") or {
+        "text": text,
+        "stage": deal.get("stage"),
+        "created_at": now,
+    }
+    followup["status"] = "sent"
+    followup["sent_at"] = now
+    deal["followup"] = followup
+    if not deal.get("followups"):
+        deal["followups"] = [followup]
+    else:
+        deal["followups"][-1] = followup
+    deal["messages"].append({
+        "direction": "outgoing",
+        "text": text,
+        "timestamp": now,
+        "kind": "followup",
+    })
+    save_deal(deal)
+    return deal
 
 
 def proposal_scope(deal: dict) -> str:
@@ -415,6 +545,9 @@ def format_deal_card(deal: dict) -> str:
         preview = (proposal.get("text") or "").replace("\n", " ")[:160]
         if preview:
             lines.append(f"_{preview}..._")
+    if deal.get("followup"):
+        followup = deal["followup"]
+        lines.append(f"✉️ Follow-up: {followup.get('status', 'draft')}")
     payment = deal.get("payment") or {}
     if payment.get("prepayment_status") == "received":
         lines.append(f"💳 Предоплата: получена ({payment.get('prepayment_amount') or 'сумма не указана'})")
