@@ -334,33 +334,16 @@ async def scan_history(client, entity, chat_name, chat_username, hours=24):
     return count
 
 
-# ── Команды через polling ─────────────────────────────────────────────────────
+# ── Проверка стоп-файла ───────────────────────────────────────────────────────
 
 async def poll_commands():
+    """Только проверяет стоп-файл. НЕ делает getUpdates — это работа бота."""
     global RUNNING
-    offset = 0
     while RUNNING:
         if os.path.exists(STOP_FILE):
             RUNNING = False
             send_text("⏹ *Парсер остановлен.*")
             return
-        try:
-            r = requests.get(
-                f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates",
-                params={"offset": offset, "timeout": 3},
-                timeout=8
-            )
-            for update in r.json().get("result", []):
-                offset = update["update_id"] + 1
-                msg = update.get("message", {})
-                text = (msg.get("text", "") or "").lower().strip()
-                if text in ["/стоп", "/stop", "стоп", "stop"]:
-                    RUNNING = False
-                    open(STOP_FILE, 'w').close()
-                    send_text("⏹ *Парсер остановлен.*")
-                    return
-        except:
-            pass
         await asyncio.sleep(2)
 
 

@@ -1120,4 +1120,4 @@ if __name__ == "__main__":
     print(f"Username: @{BOT_USERNAME}")
     print("Группа: отвечает только на @упоминания и реплаи")
     print("Слушаю...")
-    bot.infinity_polling()
+    bot.infinity_polling(allowed_updates=["message", "callback_query"])
