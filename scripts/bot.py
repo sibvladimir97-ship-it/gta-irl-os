@@ -274,6 +274,15 @@ def cmd_reset(msg):
     chat_history.pop(msg.from_user.id, None)
     bot.send_message(msg.chat.id, "✅ История сброшена.")
 
+@bot.message_handler(commands=["стоп", "stop"])
+def cmd_stop_parser(msg):
+    stop_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", ".parser_stop")
+    try:
+        open(stop_file, 'w').close()
+        bot.send_message(msg.chat.id, "⏹ Команда отправлена. Парсер остановится через несколько секунд.")
+    except Exception as e:
+        bot.send_message(msg.chat.id, f"❌ Ошибка: {e}")
+
 @bot.message_handler(commands=["status"])
 def cmd_status(msg):
     bot.send_message(msg.chat.id, fmt_status(parse_target()), parse_mode="Markdown")

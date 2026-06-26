@@ -19,10 +19,15 @@ BOT_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 GROQ_KEY  = os.getenv("GROQ_API_KEY", "")
 GROQ_URL  = "https://api.groq.com/openai/v1/chat/completions"
 
+STOP_FILE    = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".parser_stop")
 SESSION_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "parser_session")
 
 OWNER_CHAT_ID = None
-RUNNING = True  # флаг остановки
+RUNNING = True
+
+# Убираем старый стоп-файл при запуске
+if os.path.exists(STOP_FILE):
+    os.remove(STOP_FILE)
 
 # Уже отправленные офферы — дедупликация
 seen_offers = set()
@@ -196,29 +201,38 @@ async def scan_history(client, entity, chat_name, chat_username, hours=24):
 # ── Команды бота ──────────────────────────────────────────────────────────────
 
 async def check_bot_commands(bot_token, owner_id):
-    """Проверяет не написал ли пользователь /стоп в боте."""
+    """Проверяет команды из бота через файл-флаг."""
     global RUNNING
     offset = 0
     while RUNNING:
+        # Проверяем стоп-файл
+        if os.path.exists(STOP_FILE):
+            RUNNING = False
+            send_to_bot("⏹ *Парсер остановлен.*\n\nДля запуска: `python3 scripts/offer_parser.py`")
+            return
+
+        # Проверяем команды через Telegram polling
         try:
             r = requests.get(
                 f"https://api.telegram.org/bot{bot_token}/getUpdates",
-                params={"offset": offset, "timeout": 5},
-                timeout=10
+                params={"offset": offset, "timeout": 3},
+                timeout=8
             )
             data = r.json()
             for update in data.get("result", []):
                 offset = update["update_id"] + 1
                 msg = update.get("message", {})
-                text = msg.get("text", "").lower().strip()
+                text = (msg.get("text", "") or "").lower().strip()
                 chat_id = msg.get("chat", {}).get("id")
-                if chat_id == owner_id and text in ["/стоп", "/stop", "стоп", "stop"]:
+                if text in ["/стоп", "/stop", "стоп", "stop"]:
                     RUNNING = False
-                    send_to_bot("⏹ *Парсер остановлен.*\nДля запуска снова: `python3 scripts/offer_parser.py`")
+                    # Создаём файл-флаг
+                    open(STOP_FILE, 'w').close()
+                    send_to_bot("⏹ *Парсер остановлен.*\n\nДля запуска: `python3 scripts/offer_parser.py`")
                     return
         except:
             pass
-        await asyncio.sleep(3)
+        await asyncio.sleep(2)
 
 
 # ── Основной цикл ─────────────────────────────────────────────────────────────
