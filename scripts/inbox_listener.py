@@ -26,7 +26,7 @@ BOT_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 GROQ_KEY  = os.getenv("GROQ_API_KEY", "")
 GROQ_URL  = "https://api.groq.com/openai/v1/chat/completions"
 
-SESSION_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "inbox_session")
+SESSION_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "parser_session")
 STOP_FILE    = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".inbox_stop")
 
 OWNER_CHAT_ID = None

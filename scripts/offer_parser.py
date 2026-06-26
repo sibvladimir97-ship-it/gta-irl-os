@@ -371,7 +371,65 @@ async def main():
             chat_username, chat_name = "", "Чат"
         await process_message(event.message, client, chat_name, chat_username, is_history=False)
 
-    print("Слушаю новые сообщения...")
+    # Слушаем входящие личные сообщения (inbox listener встроен)
+    @client.on(events.NewMessage(incoming=True, func=lambda e: e.is_private))
+    async def handle_inbox(event):
+        if not RUNNING:
+            return
+        msg = event.message
+        text = msg.text or ""
+        if not text:
+            return
+        try:
+            sender = await event.get_sender()
+            sender_id   = sender.id
+            if sender_id == me.id:
+                return
+            sender_name = getattr(sender, "first_name", "") or getattr(sender, "username", "?")
+        except:
+            return
+        # Ищем активную сделку
+        from negotiator import list_deals, get_deal, save_deal, update_stage, add_message, STAGE_LABELS
+        deals = list_deals()
+        matched = None
+        for deal in deals:
+            if deal.get("stage") in ["CLOSED", "LOST", "SCAM"]:
+                continue
+            if deal.get("contact", {}).get("user_id") and int(deal["contact"]["user_id"]) == int(sender_id):
+                matched = deal
+                break
+        if not matched:
+            return
+        deal_id = matched["deal_id"]
+        add_message(matched, "incoming", text)
+        if matched.get("stage") == "FIRST_MESSAGE_SENT":
+            update_stage(matched, "QUALIFYING")
+        # Уведомляем
+        send_text(
+            f"📨 *Ответ клиента*\nСделка `{deal_id}`\n👤 {sender_name}\n\n_{text[:300]}_"
+        )
+        # Генерируем следующий вопрос
+        import sys
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from inbox_listener import generate_qualifying_question
+        next_q = generate_qualifying_question(matched, text)
+        matched["draft"] = next_q
+        save_deal(matched)
+        keyboard = {"inline_keyboard": [[
+            {"text": "✅ Отправить", "callback_data": f"send_reply:{deal_id}"},
+            {"text": "❌ Пропустить", "callback_data": f"skip_reply:{deal_id}"},
+        ]]}
+        if OWNER_CHAT_ID and BOT_TOKEN:
+            requests.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                json={"chat_id": OWNER_CHAT_ID,
+                      "text": f"✏️ *Черновик ответа*\n\n_{next_q}_\n\nОтправить?",
+                      "parse_mode": "Markdown",
+                      "reply_markup": keyboard},
+                timeout=10
+            )
+
+    print("Слушаю новые сообщения и входящие от клиентов...")
     while RUNNING:
         await asyncio.sleep(1)
 
