@@ -117,7 +117,7 @@ def ai_evaluate(text, chat_name):
                   "messages": [
                       {"role": "system", "content": """Ты оцениваешь фриланс-офферы для Владимира.
 Его навыки: Python, Telegram-боты, AI-агенты, автоматизация, Groq/Claude API, монтаж видео.
-Важно: с AI-помощью он может сделать почти любую задачу за 1-3 дня.
+С AI-помощью он может сделать почти любую задачу за 1-3 дня.
 
 Ответь строго в формате:
 ⚡ Реализуемость: [Легко/Средне/Сложно]
@@ -128,6 +128,9 @@ def ai_evaluate(text, chat_name):
                   ],
                   "max_tokens": 150},
             timeout=15)
+        if r.status_code == 429:
+            return None  # тихо пропускаем при rate limit
+        r.raise_for_status()
         return r.json()["choices"][0]["message"]["content"]
     except:
         return None
@@ -197,7 +200,7 @@ async def scan_history(client, entity, chat_name, chat_username, hours=24):
         date_str = msg.date.strftime("%d.%m %H:%M")
         send_to_bot(format_offer(text, chat_name, msg_link, sender_link, sender_name, date_str, is_history=True))
         count += 1
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(2)  # 2 сек между офферами — не спамим Groq
     return count
 
 
