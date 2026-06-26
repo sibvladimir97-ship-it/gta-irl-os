@@ -170,6 +170,86 @@ def update_stage(deal: dict, stage: str) -> dict:
     return deal
 
 
+def extract_brief_info(text: str) -> dict:
+    """Extract simple brief fields from a client message without AI."""
+    text = text or ""
+    info = {}
+
+    budget_patterns = [
+        r"(?:бюджет|стоимость|оплата|цена)[:\s]+([^\n,;]+)",
+        r"(?:готов(?:ы)?\s+заплатить|можем\s+заплатить)[:\s]+([^\n,;]+)",
+        r"(\d[\d\s]*(?:руб|рубл|₽|р\.|k|к|тыс|000|usd|eur|thb|\$|€))",
+    ]
+    for pattern in budget_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            info["budget"] = match.group(1).strip()
+            break
+
+    deadline_patterns = [
+        r"(?:дедлайн|срок)[:\s]+([^\n,;]+)",
+        r"((?:до|к)\s+\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?)",
+        r"(\d{1,2}[./]\d{1,2}(?:[./]\d{2,4})?)",
+        r"((?:за|через)\s+\d+\s+(?:день|дня|дней|недел[юиь]?|месяц(?:а|ев)?))",
+    ]
+    for pattern in deadline_patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            info["deadline"] = match.group(1).strip()
+            break
+
+    scope_patterns = [
+        r"(?:тз|задача|нужно|надо|что сделать)[:\s]+(.+)",
+        r"(?:нужен|нужна|нужно)\s+(.+)",
+    ]
+    for pattern in scope_patterns:
+        match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+        if match:
+            scope = re.sub(r"\s+", " ", match.group(1)).strip()
+            if len(scope) >= 12:
+                info["scope"] = scope[:1000]
+                break
+
+    return info
+
+
+def update_brief_from_text(deal: dict, text: str) -> dict:
+    """Update deal brief/budget/deadline from text and log what changed."""
+    ensure_deal_fields(deal)
+    info = extract_brief_info(text)
+    if not info:
+        return deal
+
+    brief = deal.setdefault("brief", {})
+    changed = {}
+
+    if info.get("budget") and not deal.get("budget"):
+        deal["budget"] = info["budget"]
+        brief["budget"] = info["budget"]
+        changed["budget"] = info["budget"]
+    elif info.get("budget") and not brief.get("budget"):
+        brief["budget"] = info["budget"]
+        changed["budget"] = info["budget"]
+
+    if info.get("deadline") and not deal.get("deadline"):
+        deal["deadline"] = info["deadline"]
+        brief["deadline"] = info["deadline"]
+        changed["deadline"] = info["deadline"]
+    elif info.get("deadline") and not brief.get("deadline"):
+        brief["deadline"] = info["deadline"]
+        changed["deadline"] = info["deadline"]
+
+    if info.get("scope") and not brief.get("scope"):
+        brief["scope"] = info["scope"]
+        deal.setdefault("tz", info["scope"])
+        changed["scope"] = info["scope"][:300]
+
+    if changed:
+        add_event(deal, "brief_updated", "Brief обновлён из сообщения клиента", changed)
+
+    return deal
+
+
 def add_message(deal: dict, direction: str, text: str) -> dict:
     """direction: 'outgoing' | 'incoming'"""
     now = datetime.utcnow().isoformat()
@@ -183,6 +263,8 @@ def add_message(deal: dict, direction: str, text: str) -> dict:
         "direction": direction,
         "text": text[:500],
     })
+    if direction == "incoming":
+        update_brief_from_text(deal, text)
     save_deal(deal)
     return deal
 
@@ -852,6 +934,38 @@ def format_deal_card(deal: dict) -> str:
         arrow = "→" if last["direction"] == "outgoing" else "←"
         lines.append(f"\nПоследнее: {arrow} {last['text'][:100]}")
 
+    return "\n".join(lines)
+
+
+def format_deal_brief(deal: dict) -> str:
+    """Format collected brief fields and missing inputs."""
+    ensure_deal_fields(deal)
+    brief = deal.get("brief") or {}
+    budget = deal.get("budget") or brief.get("budget")
+    deadline = deal.get("deadline") or brief.get("deadline")
+    scope = brief.get("scope") or deal.get("tz")
+
+    missing = []
+    if not scope:
+        missing.append("ТЗ / объём работы")
+    if not budget:
+        missing.append("бюджет")
+    if not deadline:
+        missing.append("дедлайн")
+
+    lines = [
+        f"🧾 *Brief сделки {deal['deal_id']}*",
+        f"Стадия: {stage_label(deal.get('stage'))}",
+        "",
+        f"ТЗ: {scope or '—'}",
+        f"Бюджет: {budget or '—'}",
+        f"Дедлайн: {deadline or '—'}",
+    ]
+    if missing:
+        lines.append("\n⚠️ Не хватает: " + ", ".join(missing))
+        lines.append("Следующий шаг: уточнить недостающие вводные у клиента.")
+    else:
+        lines.append("\n✅ Brief достаточно полный. Можно готовить КП.")
     return "\n".join(lines)
 
 

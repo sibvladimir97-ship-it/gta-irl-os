@@ -23,7 +23,7 @@ from negotiator import (
     record_prepayment, plan_execution, start_execution, mark_delivered,
     record_final_payment, pipeline_summary, money_summary,
     prepare_followup, mark_followup_sent, list_followup_candidates,
-    format_deal_timeline, close_deal, loss_summary, attention_summary,
+    format_deal_timeline, format_deal_brief, close_deal, loss_summary, attention_summary,
 )
 from deal_pipeline import is_terminal_stage, stage_label
 
@@ -128,7 +128,10 @@ def deal_keyboard(deal: dict):
         rows.append([{"text": label, "callback_data": f"deal:{next_stage}:{deal['deal_id']}"}])
 
     rows.append([
+        {"text": "🧾 Brief", "callback_data": f"deal:brief:{deal['deal_id']}"},
         {"text": "🧾 Timeline", "callback_data": f"deal:timeline:{deal['deal_id']}"},
+    ])
+    rows.append([
         {"text": "🔄 Обновить", "callback_data": f"deal:refresh:{deal['deal_id']}"},
     ])
     return {"inline_keyboard": rows}
@@ -441,6 +444,7 @@ def cmd_start(msg):
         "/today — дневной фокус\n"
         "/deals — активные сделки\n"
         "/deal ID — карточка сделки\n"
+        "/brief ID — ТЗ / бюджет / дедлайн\n"
         "/timeline ID — история сделки\n"
         "/pipeline — дашборд воронки\n"
         "/attention — что требует внимания\n"
@@ -522,6 +526,22 @@ def cmd_deal(msg):
         return
 
     send_deal_card(msg.chat.id, deal)
+
+
+@bot.message_handler(commands=["brief"])
+def cmd_brief(msg):
+    parts = (msg.text or "").split(maxsplit=1)
+    if len(parts) < 2:
+        bot.send_message(msg.chat.id, "Напиши так: `/brief ID`", parse_mode="Markdown")
+        return
+
+    deal_id = parts[1].strip()
+    deal = get_deal(deal_id)
+    if not deal:
+        bot.send_message(msg.chat.id, f"❌ Сделка `{deal_id}` не найдена.", parse_mode="Markdown")
+        return
+
+    bot.send_message(msg.chat.id, format_deal_brief(deal), parse_mode="Markdown")
 
 
 @bot.message_handler(commands=["timeline"])
@@ -747,6 +767,11 @@ def handle_callback(call):
         if next_stage == "timeline":
             bot.answer_callback_query(call.id, "🧾 Timeline")
             bot.send_message(chat_id, format_deal_timeline(deal), parse_mode="Markdown")
+            return
+
+        if next_stage == "brief":
+            bot.answer_callback_query(call.id, "🧾 Brief")
+            bot.send_message(chat_id, format_deal_brief(deal), parse_mode="Markdown")
             return
 
         if next_stage.startswith("close_lost_"):
