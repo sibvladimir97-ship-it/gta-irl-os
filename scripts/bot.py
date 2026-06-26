@@ -11,6 +11,12 @@ import requests
 import telebot
 from datetime import date, datetime
 
+# Импортируем воронку
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from offer_store import get_offer, update_offer
+from negotiator import create_deal, draft_first_message, update_stage, add_message, format_deal_card, get_deal, save_deal
+
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 GROQ_API_KEY   = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL     = "llama-3.3-70b-versatile"
@@ -344,6 +350,132 @@ def handle_text(msg):
         bot.edit_message_text(reply, msg.chat.id, thinking.message_id)
     except Exception as e:
         bot.edit_message_text(f"❌ Ошибка: {e}", msg.chat.id, thinking.message_id)
+
+
+# ── Inline кнопки воронки ────────────────────────────────────────────────────
+
+@bot.callback_query_handler(func=lambda call: True)
+def handle_callback(call):
+    data = call.data
+    chat_id = call.message.chat.id
+    msg_id = call.message.message_id
+
+    try:
+        action, offer_id = data.split(":", 1)
+    except:
+        bot.answer_callback_query(call.id, "❌ Ошибка")
+        return
+
+    offer = get_offer(offer_id)
+    if not offer:
+        bot.answer_callback_query(call.id, "❌ Оффер не найден")
+        return
+
+    if action == "scam":
+        update_offer(offer_id, status="SCAM")
+        bot.answer_callback_query(call.id, "🚫 Помечен как скам")
+        bot.edit_message_reply_markup(chat_id, msg_id, reply_markup=None)
+        bot.send_message(chat_id, f"🚫 Оффер `{offer_id}` помечен как *СКАМ*", parse_mode="Markdown")
+
+    elif action == "hide":
+        update_offer(offer_id, status="HIDDEN")
+        bot.answer_callback_query(call.id, "👁 Скрыто")
+        bot.edit_message_reply_markup(chat_id, msg_id, reply_markup=None)
+
+    elif action == "delegate":
+        update_offer(offer_id, status="DELEGATED")
+        bot.answer_callback_query(call.id, "📤 Отмечено для делегирования")
+        bot.edit_message_reply_markup(chat_id, msg_id, reply_markup=None)
+        bot.send_message(chat_id, f"📤 Оффер `{offer_id}` — *в делегирование*", parse_mode="Markdown")
+
+    elif action == "respond":
+        # Создаём сделку и генерируем черновик
+        bot.answer_callback_query(call.id, "⏳ Генерирую черновик...")
+        deal = create_deal(offer)
+        update_offer(offer_id, status="RESPONDED", deal_id=deal["deal_id"])
+        update_stage(deal, "FIRST_MESSAGE_DRAFTED")
+
+        draft = draft_first_message(deal)
+
+        # Кнопки подтверждения
+        keyboard = {
+            "inline_keyboard": [[
+                {"text": "✅ Отправить", "callback_data": f"send_draft:{deal['deal_id']}:{offer_id}"},
+                {"text": "✏️ Редактировать", "callback_data": f"edit_draft:{deal['deal_id']}"},
+            ], [
+                {"text": "❌ Отменить", "callback_data": f"cancel_draft:{deal['deal_id']}"},
+            ]]
+        }
+
+        # Сохраняем черновик в сделку
+        deal["draft"] = draft
+        save_deal(deal)
+
+        bot.edit_message_reply_markup(chat_id, msg_id, reply_markup=None)
+        bot.send_message(
+            chat_id,
+            f"✏️ *Черновик отклика* (сделка `{deal['deal_id']}`)\n\n_{draft}_\n\nОтправить?",
+            parse_mode="Markdown",
+            reply_markup=keyboard
+        )
+
+    elif action == "send_draft":
+        parts = offer_id.split(":", 1)
+        deal_id = parts[0]
+        real_offer_id = parts[1] if len(parts) > 1 else None
+
+        deal = get_deal(deal_id)
+        if not deal:
+            bot.answer_callback_query(call.id, "❌ Сделка не найдена")
+            return
+
+        draft = deal.get("draft", "")
+        contact_url = deal["contact"].get("contact_url", "")
+        username = deal["contact"].get("username")
+
+        bot.answer_callback_query(call.id, "📨 Отправляю...")
+
+        # Отправляем через Telethon (через скрипт)
+        try:
+            import subprocess
+            script = f"""
+import asyncio
+from telethon import TelegramClient
+import os
+async def send():
+    client = TelegramClient('scripts/parser_session',
+        int(os.getenv('TELEGRAM_API_ID')),
+        os.getenv('TELEGRAM_API_HASH'))
+    await client.start()
+    target = '{username}' if '{username}' != 'None' else int({deal['contact'].get('user_id', 0)})
+    await client.send_message(target, '''{draft}''')
+    await client.disconnect()
+asyncio.run(send())
+"""
+            result = subprocess.run(
+                ["python3", "-c", script],
+                capture_output=True, text=True, timeout=20,
+                env={**os.environ, "TELEGRAM_API_ID": os.getenv("TELEGRAM_API_ID", ""),
+                     "TELEGRAM_API_HASH": os.getenv("TELEGRAM_API_HASH", "")}
+            )
+            if result.returncode == 0:
+                update_stage(deal, "FIRST_MESSAGE_SENT")
+                add_message(deal, "outgoing", draft)
+                bot.edit_message_reply_markup(chat_id, msg_id, reply_markup=None)
+                bot.send_message(chat_id,
+                    f"✅ *Отклик отправлен!*\nСделка `{deal_id}` → стадия: 📨 Отправлено\n\nЖдём ответа...",
+                    parse_mode="Markdown")
+            else:
+                bot.send_message(chat_id, f"❌ Ошибка отправки: {result.stderr[:200]}")
+        except Exception as e:
+            bot.send_message(chat_id, f"❌ Ошибка: {e}")
+
+    elif action == "cancel_draft":
+        deal = get_deal(offer_id)  # offer_id здесь = deal_id
+        if deal:
+            update_stage(deal, "NEW_LEAD")
+        bot.answer_callback_query(call.id, "❌ Черновик отменён")
+        bot.edit_message_reply_markup(chat_id, msg_id, reply_markup=None)
 
 
 # ── Запуск ────────────────────────────────────────────────────────────────────

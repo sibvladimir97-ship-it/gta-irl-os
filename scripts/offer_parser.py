@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-GTA IRL OS — Telegram Offer Parser v2
-- Дедупликация по user_id + хэшу текста
-- Команда /стоп в боте останавливает парсер
-- AI-оценка реализуемости каждого оффера
+GTA IRL OS — Offer Parser v3
+- Хранит офферы как JSON (offer_store)
+- Отправляет карточки с inline-кнопками
+- Raw данные защищены от AI
 """
 
 import os
@@ -13,23 +13,26 @@ import requests
 from datetime import datetime, timezone, timedelta
 from telethon import TelegramClient, events
 
+# Импортируем хранилище
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from offer_store import create_offer, update_offer, validate_contact_url
+
 API_ID    = int(os.getenv("TELEGRAM_API_ID", "30611066"))
 API_HASH  = os.getenv("TELEGRAM_API_HASH", "86864ae4d512125ab1fcc930da6a6f5b")
 BOT_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 GROQ_KEY  = os.getenv("GROQ_API_KEY", "")
 GROQ_URL  = "https://api.groq.com/openai/v1/chat/completions"
 
-STOP_FILE    = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".parser_stop")
 SESSION_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "parser_session")
+STOP_FILE    = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".parser_stop")
 
 OWNER_CHAT_ID = None
 RUNNING = True
 
-# Убираем старый стоп-файл при запуске
 if os.path.exists(STOP_FILE):
     os.remove(STOP_FILE)
 
-# Уже отправленные офферы — дедупликация
 seen_offers = set()
 
 # ── Каналы ───────────────────────────────────────────────────────────────────
@@ -39,7 +42,7 @@ MONITOR_CHATS = [
     "freelansim_ru",
 ]
 
-# ── Ключевые слова — ЗАКАЗЧИКИ ────────────────────────────────────────────────
+# ── Фильтры ───────────────────────────────────────────────────────────────────
 
 KEYWORDS = [
     "ищу разработчика", "нужен разработчик", "ищем разработчика",
@@ -52,17 +55,20 @@ KEYWORDS = [
     "оплата сразу", "готов заплатить", "#ищу",
 ]
 
-# ── Исключения — ФРИЛАНСЕРЫ ───────────────────────────────────────────────────
-
 EXCLUDE = [
     "#помогу", "#предлагаю", "#услуги", "#выполню", "#возьмусь",
     "#портфолио", "#опыт", "#резюме", "#ищуработу", "#ищу_работу",
     "предлагаю свои услуги", "готов выполнить", "мои услуги",
-    "принимаю заказы", "открыт к заказам", "обращайтесь ко мне",
+    "принимаю заказы", "открыт к заказам",
+    "страховой взнос", "залог", "гарантийный взнос",  # антискам
 ]
 
+# Скам-маркеры
+SCAM_MARKERS = [
+    "страховой взнос", "залог", "гарантийный взнос",
+    "внести взнос", "оплатить страховку",
+]
 
-# ── Фильтр ────────────────────────────────────────────────────────────────────
 
 def is_client_offer(text):
     t = text.lower()
@@ -73,8 +79,12 @@ def is_client_offer(text):
     return len(matches) >= 1, matches
 
 
+def is_scam(text):
+    t = text.lower()
+    return any(m in t for m in SCAM_MARKERS)
+
+
 def offer_hash(text, sender_id=None):
-    """Уникальный ключ оффера — по отправителю + первым 100 символам текста."""
     key = f"{sender_id}:{text[:100]}"
     return hashlib.md5(key.encode()).hexdigest()
 
@@ -87,12 +97,111 @@ def is_duplicate(text, sender_id=None):
     return False
 
 
-# ── Отправка ──────────────────────────────────────────────────────────────────
+# ── AI оценка (только display, не трогает raw) ────────────────────────────────
 
-def send_to_bot(text):
-    global OWNER_CHAT_ID
+def ai_score(text, chat_name):
+    if not GROQ_KEY:
+        return None
+    try:
+        r = requests.post(GROQ_URL,
+            headers={"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"},
+            json={"model": "llama-3.3-70b-versatile",
+                  "messages": [
+                      {"role": "system", "content": """Оцени фриланс-оффер для Владимира (Python, боты, AI, монтаж).
+Формат ответа — строго 4 строки:
+⚡ [Легко/Средне/Сложно]
+💰 [бюджет или "уточнить"]
+⏱ [срок]
+📌 [брать/не брать — 1 причина]"""},
+                      {"role": "user", "content": f"{text[:400]}"}
+                  ],
+                  "max_tokens": 100},
+            timeout=12)
+        if r.status_code == 429:
+            return None
+        return r.json()["choices"][0]["message"]["content"]
+    except:
+        return None
+
+
+# ── Отправка карточки с inline-кнопками ──────────────────────────────────────
+
+def safe_md(text: str) -> str:
+    """Экранирует спецсимволы Markdown v1 в тексте."""
+    for ch in ["_", "*", "`", "["]:
+        text = text.replace(ch, f"\\{ch}")
+    return text
+
+
+def send_offer_card(offer: dict):
+    """Отправляет карточку оффера с inline-кнопками."""
     if not OWNER_CHAT_ID or not BOT_TOKEN:
-        print("[БОТ]", text[:80])
+        return
+
+    d = offer["display"]
+    raw = offer["raw"]
+    offer_id = offer["offer_id"]
+
+    scam_flag = "🚫 *ВОЗМОЖНЫЙ СКАМ*\n" if is_scam(offer["raw_text"]) else ""
+
+    # Безопасное отображение контакта
+    username = raw.get("sender_username")
+    sender_name = safe_md(d["sender_name"])
+    if username:
+        clean_username = username.lstrip("@")
+        contact_display = f"[{sender_name}](https://t.me/{clean_username})"
+    else:
+        sender_id = raw.get("sender_id")
+        contact_display = f"[{sender_name}](tg://user?id={sender_id})" if sender_id else sender_name
+
+    # Ссылка на сообщение
+    msg_url = raw.get("msg_url")
+    source_display = f"[{safe_md(d['chat_name'])}]({msg_url})" if msg_url else safe_md(d['chat_name'])
+
+    # Превью текста — без Markdown обработки AI
+    preview = safe_md(d["preview"])
+
+    text = (
+        f"{scam_flag}"
+        f"🎯 *Оффер* `{offer_id}` | {d['date']}\n"
+        f"📍 {source_display}\n"
+        f"👤 {contact_display}\n"
+        f"🔑 {', '.join(d['keywords'][:3])}\n\n"
+        f"{preview}"
+    )
+
+    if d.get("ai_score"):
+        text += f"\n\n{d['ai_score']}"
+
+    # Inline кнопки
+    keyboard = {
+        "inline_keyboard": [[
+            {"text": "✅ Откликнуться", "callback_data": f"respond:{offer_id}"},
+            {"text": "🚫 Скам",         "callback_data": f"scam:{offer_id}"},
+        ], [
+            {"text": "👁 Скрыть",       "callback_data": f"hide:{offer_id}"},
+            {"text": "📤 Делегировать", "callback_data": f"delegate:{offer_id}"},
+        ]]
+    }
+
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+            json={
+                "chat_id":    OWNER_CHAT_ID,
+                "text":       text,
+                "parse_mode": "Markdown",
+                "disable_web_page_preview": True,
+                "reply_markup": keyboard,
+            },
+            timeout=10
+        )
+    except Exception as e:
+        print(f"Ошибка отправки: {e}")
+
+
+def send_text(text: str):
+    if not OWNER_CHAT_ID or not BOT_TOKEN:
         return
     try:
         requests.post(
@@ -101,147 +210,111 @@ def send_to_bot(text):
                   "parse_mode": "Markdown", "disable_web_page_preview": True},
             timeout=10
         )
-    except Exception as e:
-        print(f"Ошибка: {e}")
-
-
-# ── AI оценка ─────────────────────────────────────────────────────────────────
-
-def ai_evaluate(text, chat_name):
-    if not GROQ_KEY:
-        return None
-    try:
-        r = requests.post(GROQ_URL,
-            headers={"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"},
-            json={"model": "llama-3.3-70b-versatile",
-                  "messages": [
-                      {"role": "system", "content": """Ты оцениваешь фриланс-офферы для Владимира.
-Его навыки: Python, Telegram-боты, AI-агенты, автоматизация, Groq/Claude API, монтаж видео.
-С AI-помощью он может сделать почти любую задачу за 1-3 дня.
-
-Ответь строго в формате:
-⚡ Реализуемость: [Легко/Средне/Сложно]
-💰 Бюджет: [сумма или "уточнить"]
-⏱ Срок: [оценка времени]
-📌 Вывод: [1 предложение — брать или нет]"""},
-                      {"role": "user", "content": f"Оффер из {chat_name}:\n{text[:500]}"}
-                  ],
-                  "max_tokens": 150},
-            timeout=15)
-        if r.status_code == 429:
-            return None  # тихо пропускаем при rate limit
-        r.raise_for_status()
-        return r.json()["choices"][0]["message"]["content"]
     except:
-        return None
-
-
-def format_offer(text, chat_name, msg_link, sender_link, sender_name, date_str, is_history=False):
-    icon = "📚 *История*" if is_history else "🎯 *Новый оффер*"
-    _, keywords = is_client_offer(text)
-    preview = text[:350] + ("..." if len(text) > 350 else "")
-    kw_str = ", ".join(keywords[:3])
-
-    result = f"{icon} | {date_str}\n📍 {chat_name}\n🔑 {kw_str}\n\n{preview}"
-
-    # Ссылки
-    links = []
-    if msg_link:
-        links.append(f"[Сообщение]({msg_link})")
-    if sender_link:
-        links.append(f"[Написать {sender_name}]({sender_link})")
-    if links:
-        result += "\n\n" + " | ".join(links)
-
-    evaluation = ai_evaluate(text, chat_name)
-    if evaluation:
-        result += f"\n\n{evaluation}"
-    return result
+        pass
 
 
 # ── Сканирование истории ──────────────────────────────────────────────────────
 
-async def get_sender_link(msg, client):
-    """Возвращает ссылку на автора сообщения."""
+async def get_sender_info(msg, client):
     try:
         sender = await msg.get_sender()
-        username = getattr(sender, 'username', None)
-        sender_id = getattr(sender, 'id', None)
-        first_name = getattr(sender, 'first_name', '') or ''
-        if username:
-            return f"@{username}", f"https://t.me/{username}", first_name
-        elif sender_id:
-            return first_name or "Автор", f"tg://user?id={sender_id}", first_name
+        return {
+            "id":         getattr(sender, "id", None),
+            "username":   getattr(sender, "username", None),
+            "first_name": getattr(sender, "first_name", "") or "",
+        }
     except:
-        pass
-    return "Автор", None, ""
+        return {"id": None, "username": None, "first_name": "Неизвестно"}
+
+
+async def process_message(msg, client, chat_name, chat_username, is_history=False):
+    global RUNNING
+    if os.path.exists(STOP_FILE):
+        RUNNING = False
+        return
+
+    text = msg.text or ""
+    if len(text) < 30:
+        return
+
+    found, keywords = is_client_offer(text)
+    if not found:
+        return
+
+    sender_info = await get_sender_info(msg, client)
+    sender_id = sender_info["id"] or msg.sender_id
+
+    if is_duplicate(text, sender_id):
+        return
+
+    date_str = msg.date.strftime("%d.%m %H:%M") if hasattr(msg.date, 'strftime') else str(msg.date)
+    score = ai_score(text, chat_name)
+
+    offer = create_offer(
+        raw_text=text,
+        chat_name=chat_name,
+        chat_username=chat_username,
+        msg_id=msg.id,
+        sender_id=sender_id,
+        sender_name=sender_info["first_name"] or "Аноним",
+        sender_username=sender_info["username"],
+        msg_date=date_str,
+        keywords=keywords,
+        ai_score=score,
+    )
+
+    send_offer_card(offer)
+    prefix = "📚" if is_history else "🆕"
+    print(f"{prefix} [{date_str}] {chat_name}: {text[:60]}...")
 
 
 async def scan_history(client, entity, chat_name, chat_username, hours=24):
+    from datetime import timezone
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     count = 0
     async for msg in client.iter_messages(entity, limit=1000):
-        # Проверяем стоп-файл на каждой итерации
         if os.path.exists(STOP_FILE):
             return count
         if not msg.date or msg.date < cutoff:
             break
-        text = msg.text or ""
-        if len(text) < 30:
-            continue
-        found, _ = is_client_offer(text)
-        if not found:
-            continue
-        sender_id = msg.sender_id
-        if is_duplicate(text, sender_id):
-            continue
-        msg_link = f"https://t.me/{chat_username}/{msg.id}" if chat_username else None
-        sender_name, sender_link, first_name = await get_sender_link(msg, client)
-        date_str = msg.date.strftime("%d.%m %H:%M")
-        send_to_bot(format_offer(text, chat_name, msg_link, sender_link, sender_name, date_str, is_history=True))
+        await process_message(msg, client, chat_name, chat_username, is_history=True)
         count += 1
-        await asyncio.sleep(2)  # 2 сек между офферами — не спамим Groq
+        await asyncio.sleep(2)
     return count
 
 
-# ── Команды бота ──────────────────────────────────────────────────────────────
+# ── Команды через polling ─────────────────────────────────────────────────────
 
-async def check_bot_commands(bot_token, owner_id):
-    """Проверяет команды из бота через файл-флаг."""
+async def poll_commands():
     global RUNNING
     offset = 0
     while RUNNING:
-        # Проверяем стоп-файл
         if os.path.exists(STOP_FILE):
             RUNNING = False
-            send_to_bot("⏹ *Парсер остановлен.*\n\nДля запуска: `python3 scripts/offer_parser.py`")
+            send_text("⏹ *Парсер остановлен.*")
             return
-
-        # Проверяем команды через Telegram polling
         try:
             r = requests.get(
-                f"https://api.telegram.org/bot{bot_token}/getUpdates",
+                f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates",
                 params={"offset": offset, "timeout": 3},
                 timeout=8
             )
-            data = r.json()
-            for update in data.get("result", []):
+            for update in r.json().get("result", []):
                 offset = update["update_id"] + 1
                 msg = update.get("message", {})
                 text = (msg.get("text", "") or "").lower().strip()
-                chat_id = msg.get("chat", {}).get("id")
                 if text in ["/стоп", "/stop", "стоп", "stop"]:
                     RUNNING = False
-                    # Создаём файл-флаг
                     open(STOP_FILE, 'w').close()
-                    send_to_bot("⏹ *Парсер остановлен.*\n\nДля запуска: `python3 scripts/offer_parser.py`")
+                    send_text("⏹ *Парсер остановлен.*")
                     return
         except:
             pass
         await asyncio.sleep(2)
 
 
-# ── Основной цикл ─────────────────────────────────────────────────────────────
+# ── Main ─────────────────────────────────────────────────────────────────────
 
 async def main():
     global OWNER_CHAT_ID, RUNNING
@@ -251,7 +324,7 @@ async def main():
 
     me = await client.get_me()
     OWNER_CHAT_ID = me.id
-    print(f"Авторизован: {me.first_name} (ID: {me.id})")
+    print(f"Авторизован: {me.first_name}")
 
     monitored = []
     for username in MONITOR_CHATS:
@@ -264,62 +337,41 @@ async def main():
             print(f"FAIL: @{username} — {e}")
 
     if not monitored:
-        send_to_bot("⚠️ Ни один чат не подключён.")
+        send_text("⚠️ Нет доступных каналов.")
         return
 
     chat_list = "\n".join(f"• {t}" for _, _, t in monitored)
-    send_to_bot(
-        f"🔍 *Парсер офферов запущен v2*\n\n"
-        f"{chat_list}\n\n"
-        f"Напиши /стоп чтобы остановить."
-    )
+    send_text(f"🔍 *Парсер офферов v3*\n\n{chat_list}\n\nКнопки: Откликнуться / Скам / Скрыть / Делегировать\nНапиши /стоп для остановки.")
 
-    # Запускаем проверку команд параллельно
-    asyncio.ensure_future(check_bot_commands(BOT_TOKEN, OWNER_CHAT_ID))
+    asyncio.ensure_future(poll_commands())
 
-    # Сканируем историю
     total = 0
     for entity, username, title in monitored:
         if not RUNNING:
             break
-        print(f"Сканирую: {title}")
+        print(f"Сканирую историю: {title}")
         count = await scan_history(client, entity, title, username)
         total += count
-        print(f"  Найдено уникальных: {count}")
 
     if RUNNING:
-        msg = f"✅ История просканирована. Уникальных офферов: *{total}*\n\nСлушаю новые..."
-        send_to_bot(msg)
+        send_text(f"✅ История просканирована. Офферов: *{total}*\n\nСлушаю новые...")
 
-    # Слушаем новые сообщения
     entities = [e for e, _, _ in monitored]
+    names = {getattr(e, "id", None): (u, t) for e, u, t in monitored}
 
     @client.on(events.NewMessage(chats=entities))
     async def handle(event):
         if not RUNNING:
             return
-        text = event.message.text or ""
-        if len(text) < 30:
-            return
-        found, _ = is_client_offer(text)
-        if not found:
-            return
-        sender_id = event.message.sender_id
-        if is_duplicate(text, sender_id):
-            return
         try:
             chat = await event.get_chat()
-            title = getattr(chat, "title", None) or getattr(chat, "username", "?")
-            uname = getattr(chat, "username", None)
-            msg_link = f"https://t.me/{uname}/{event.message.id}" if uname else None
+            chat_username = getattr(chat, "username", None) or ""
+            chat_name = getattr(chat, "title", chat_username)
         except:
-            title, msg_link = "Чат", None
-        sender_name, sender_link, _ = await get_sender_link(event.message, client)
-        date_str = datetime.now().strftime("%H:%M")
-        send_to_bot(format_offer(text, title, msg_link, sender_link, sender_name, date_str, is_history=False))
+            chat_username, chat_name = "", "Чат"
+        await process_message(event.message, client, chat_name, chat_username, is_history=False)
 
-    print("Слушаю новые сообщения. Напиши /стоп в боте для остановки.")
-
+    print("Слушаю новые сообщения...")
     while RUNNING:
         await asyncio.sleep(1)
 
@@ -328,5 +380,5 @@ async def main():
 
 
 if __name__ == "__main__":
-    print("GTA IRL OS — Парсер офферов v2")
+    print("GTA IRL OS — Парсер офферов v3")
     asyncio.run(main())
