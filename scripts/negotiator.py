@@ -7,6 +7,7 @@ GTA IRL OS — Negotiator
 import json
 import uuid
 import os
+import re
 import requests
 from typing import Optional
 from datetime import datetime
@@ -140,6 +141,65 @@ def list_deals(stage: Optional[str] = None) -> list:
         if stage is None or deal.get("stage") == stage:
             deals.append(deal)
     return sorted(deals, key=lambda x: x["created_at"], reverse=True)
+
+
+def parse_money_amount(value):
+    """Best-effort numeric extraction for dashboard totals."""
+    if value is None:
+        return 0
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value).replace(",", "").replace(" ", "")
+    match = re.search(r"\d+(?:\.\d+)?", text)
+    return float(match.group()) if match else 0
+
+
+def pipeline_summary(deals=None):
+    """Return counts and lightweight cards grouped by deal stage."""
+    deals = deals if deals is not None else list_deals()
+    summary = {
+        "total": len(deals),
+        "by_stage": {},
+        "active": [],
+        "stuck": [],
+    }
+    for deal in deals:
+        ensure_deal_fields(deal)
+        stage = deal.get("stage", "UNKNOWN")
+        summary["by_stage"][stage] = summary["by_stage"].get(stage, 0) + 1
+        if stage not in ["CLOSED_WON", "CLOSED_LOST", "SCAM", "HIDDEN", "REJECTED"]:
+            summary["active"].append(deal)
+        if stage in ["WAITING_REPLY", "BRIEF_COLLECTING", "PREPAYMENT_WAITING", "FINAL_PAYMENT_WAITING"]:
+            summary["stuck"].append(deal)
+    return summary
+
+
+def money_summary(deals=None):
+    """Return simple money counters from proposal/payment state."""
+    deals = deals if deals is not None else list_deals()
+    totals = {
+        "proposed": 0,
+        "prepayment_received": 0,
+        "final_received": 0,
+        "won_deals": 0,
+        "waiting_prepayment": 0,
+        "waiting_final": 0,
+    }
+    for deal in deals:
+        ensure_deal_fields(deal)
+        proposal = deal.get("proposal") or {}
+        payment = deal.get("payment") or {}
+        totals["proposed"] += parse_money_amount(proposal.get("budget") or deal.get("budget"))
+        totals["prepayment_received"] += parse_money_amount(payment.get("prepayment_amount"))
+        totals["final_received"] += parse_money_amount(payment.get("final_payment_amount"))
+        if deal.get("stage") == "CLOSED_WON":
+            totals["won_deals"] += 1
+        if deal.get("stage") == "PREPAYMENT_WAITING":
+            totals["waiting_prepayment"] += 1
+        if deal.get("stage") == "FINAL_PAYMENT_WAITING":
+            totals["waiting_final"] += 1
+    totals["received_total"] = totals["prepayment_received"] + totals["final_received"]
+    return totals
 
 
 # ── AI черновик ───────────────────────────────────────────────────────────────

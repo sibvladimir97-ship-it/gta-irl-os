@@ -21,7 +21,7 @@ from negotiator import (
     create_deal, draft_first_message, update_stage, add_message,
     format_deal_card, get_deal, save_deal, list_deals, prepare_proposal,
     record_prepayment, plan_execution, start_execution, mark_delivered,
-    record_final_payment,
+    record_final_payment, pipeline_summary, money_summary,
 )
 from deal_pipeline import is_terminal_stage, stage_label
 
@@ -431,6 +431,8 @@ def cmd_start(msg):
         "/today — дневной фокус\n"
         "/deals — активные сделки\n"
         "/deal ID — карточка сделки\n"
+        "/pipeline — дашборд воронки\n"
+        "/money — деньги по сделкам\n"
         "/reset — сбросить историю",
         parse_mode="Markdown")
 
@@ -505,6 +507,73 @@ def cmd_deal(msg):
         return
 
     send_deal_card(msg.chat.id, deal)
+
+
+@bot.message_handler(commands=["pipeline"])
+def cmd_pipeline(msg):
+    summary = pipeline_summary()
+    if summary["total"] == 0:
+        bot.send_message(msg.chat.id, "Воронка пуста: сделок пока нет.")
+        return
+
+    stage_order = [
+        "FIRST_MESSAGE_DRAFTED",
+        "WAITING_REPLY",
+        "BRIEF_COLLECTING",
+        "BRIEF_READY",
+        "PROPOSAL_DRAFTED",
+        "PROPOSAL_SENT",
+        "PREPAYMENT_WAITING",
+        "PREPAYMENT_RECEIVED",
+        "EXECUTION_PLANNING",
+        "IN_PROGRESS",
+        "DELIVERED",
+        "FINAL_PAYMENT_WAITING",
+        "CLOSED_WON",
+        "CLOSED_LOST",
+        "SCAM",
+        "REJECTED",
+        "DELEGATED",
+        "CLIENT_GHOSTED",
+    ]
+
+    lines = [
+        "📊 *GTA IRL OS — Pipeline*",
+        f"Всего сделок: `{summary['total']}`",
+        f"Активных: `{len(summary['active'])}`",
+        "",
+    ]
+    for stage in stage_order:
+        count = summary["by_stage"].get(stage, 0)
+        if count:
+            lines.append(f"{stage_label(stage)}: `{count}`")
+
+    if summary["stuck"]:
+        lines.append("\n⚠️ *Требуют внимания:*")
+        for deal in summary["stuck"][:5]:
+            contact = deal.get("contact", {})
+            name = contact.get("name") or contact.get("username") or "клиент"
+            lines.append(f"`{deal['deal_id']}` — {stage_label(deal['stage'])} — {name}")
+
+    lines.append("\nОткрыть сделку: `/deal ID`")
+    bot.send_message(msg.chat.id, "\n".join(lines), parse_mode="Markdown")
+
+
+@bot.message_handler(commands=["money"])
+def cmd_money(msg):
+    totals = money_summary()
+    lines = [
+        "💰 *GTA IRL OS — Деньги по сделкам*",
+        f"КП / потенциально: `{totals['proposed']:,.0f}`",
+        f"Предоплата получена: `{totals['prepayment_received']:,.0f}`",
+        f"Финальная оплата получена: `{totals['final_received']:,.0f}`",
+        f"Всего получено: `{totals['received_total']:,.0f}`",
+        "",
+        f"Закрыто успешно: `{totals['won_deals']}`",
+        f"Ждём предоплату: `{totals['waiting_prepayment']}`",
+        f"Ждём доплату: `{totals['waiting_final']}`",
+    ]
+    bot.send_message(msg.chat.id, "\n".join(lines), parse_mode="Markdown")
 
 
 @bot.message_handler(content_types=["voice"])
