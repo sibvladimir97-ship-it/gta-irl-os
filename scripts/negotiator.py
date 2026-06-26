@@ -49,6 +49,21 @@ def ensure_deal_fields(deal: dict) -> dict:
     })
     deal.setdefault("followup", None)
     deal.setdefault("followups", [])
+    deal.setdefault("events", [])
+    return deal
+
+
+def add_event(deal: dict, event_type: str, title: str, data=None, save=False) -> dict:
+    """Append an auditable event to deal timeline."""
+    ensure_deal_fields(deal)
+    deal["events"].append({
+        "type": event_type,
+        "title": title,
+        "data": data or {},
+        "timestamp": datetime.utcnow().isoformat(),
+    })
+    if save:
+        save_deal(deal)
     return deal
 
 # ── CRUD сделок ───────────────────────────────────────────────────────────────
@@ -93,11 +108,16 @@ def create_deal(offer: dict) -> dict:
         },
         "followup":   None,
         "followups":  [],
+        "events":     [],
         "budget":     None,
         "deadline":   None,
         "result":     None,
     }
     ensure_deal_fields(deal)
+    add_event(deal, "deal_created", "Сделка создана", {
+        "offer_id": deal["offer_id"],
+        "stage": deal["stage"],
+    })
     save_deal(deal)
     return deal
 
@@ -119,17 +139,29 @@ def get_deal(deal_id: str) -> Optional[dict]:
 
 
 def update_stage(deal: dict, stage: str) -> dict:
+    old_stage = deal.get("stage")
     move_deal(deal, stage, reason="manual_update")
+    if old_stage != deal.get("stage"):
+        add_event(deal, "stage_changed", f"Стадия: {stage_label(old_stage)} → {stage_label(deal['stage'])}", {
+            "from": old_stage,
+            "to": deal["stage"],
+        })
     save_deal(deal)
     return deal
 
 
 def add_message(deal: dict, direction: str, text: str) -> dict:
     """direction: 'outgoing' | 'incoming'"""
+    now = datetime.utcnow().isoformat()
     deal["messages"].append({
         "direction": direction,
         "text":      text,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": now,
+    })
+    title = "Исходящее сообщение" if direction == "outgoing" else "Входящее сообщение"
+    add_event(deal, "message", title, {
+        "direction": direction,
+        "text": text[:500],
     })
     save_deal(deal)
     return deal
@@ -364,6 +396,10 @@ def prepare_followup(deal: dict) -> dict:
     }
     deal["followups"].append(deal["followup"])
     deal["draft"] = text
+    add_event(deal, "followup_drafted", "Follow-up подготовлен", {
+        "stage": deal.get("stage"),
+        "text": text[:500],
+    })
     save_deal(deal)
     return deal
 
@@ -389,6 +425,10 @@ def mark_followup_sent(deal: dict, text: str) -> dict:
         "text": text,
         "timestamp": now,
         "kind": "followup",
+    })
+    add_event(deal, "followup_sent", "Follow-up отправлен", {
+        "stage": deal.get("stage"),
+        "text": text[:500],
     })
     save_deal(deal)
     return deal
@@ -430,6 +470,11 @@ def prepare_proposal(deal: dict) -> dict:
     }
     deal["draft"] = text
     move_deal(deal, "PROPOSAL_DRAFTED", reason="proposal_prepared")
+    add_event(deal, "proposal_drafted", "КП подготовлено", {
+        "budget": budget,
+        "deadline": deadline,
+        "text": text[:500],
+    })
     save_deal(deal)
     return deal
 
@@ -452,6 +497,10 @@ def record_prepayment(deal: dict, amount=None) -> dict:
         "note": "marked_from_telegram",
     })
     move_deal(deal, "PREPAYMENT_RECEIVED", reason="prepayment_received")
+    add_event(deal, "payment_received", "Предоплата получена", {
+        "type": "prepayment",
+        "amount": amount,
+    })
     save_deal(deal)
     return deal
 
@@ -464,6 +513,9 @@ def plan_execution(deal: dict, mode="self") -> dict:
     execution["status"] = "planning"
     execution["planned_at"] = datetime.utcnow().isoformat()
     move_deal(deal, "EXECUTION_PLANNING", reason="execution_planning")
+    add_event(deal, "execution_planned", "План исполнения создан", {
+        "mode": mode,
+    })
     save_deal(deal)
     return deal
 
@@ -478,6 +530,9 @@ def start_execution(deal: dict, mode=None) -> dict:
     execution["status"] = "in_progress"
     execution["started_at"] = datetime.utcnow().isoformat()
     move_deal(deal, "IN_PROGRESS", reason="execution_started")
+    add_event(deal, "execution_started", "Работа начата", {
+        "mode": execution["mode"],
+    })
     save_deal(deal)
     return deal
 
@@ -489,6 +544,7 @@ def mark_delivered(deal: dict) -> dict:
     execution["status"] = "delivered"
     execution["delivered_at"] = datetime.utcnow().isoformat()
     move_deal(deal, "DELIVERED", reason="delivered")
+    add_event(deal, "delivered", "Работа сдана клиенту")
     save_deal(deal)
     return deal
 
@@ -511,6 +567,13 @@ def record_final_payment(deal: dict, amount=None) -> dict:
         "note": "marked_from_telegram",
     })
     move_deal(deal, "CLOSED_WON", reason="final_payment_received")
+    add_event(deal, "payment_received", "Финальная оплата получена", {
+        "type": "final_payment",
+        "amount": amount,
+    })
+    add_event(deal, "deal_closed", "Сделка закрыта успешно", {
+        "result": "won",
+    })
     save_deal(deal)
     return deal
 
@@ -564,5 +627,27 @@ def format_deal_card(deal: dict) -> str:
         last = deal["messages"][-1]
         arrow = "→" if last["direction"] == "outgoing" else "←"
         lines.append(f"\nПоследнее: {arrow} {last['text'][:100]}")
+
+    return "\n".join(lines)
+
+
+def format_deal_timeline(deal: dict, limit=15) -> str:
+    """Format recent deal events for Telegram."""
+    ensure_deal_fields(deal)
+    events = deal.get("events", [])[-limit:]
+    lines = [
+        f"🧾 *Timeline сделки {deal['deal_id']}*",
+        f"Стадия: {stage_label(deal.get('stage'))}",
+        "",
+    ]
+    if not events:
+        lines.append("Событий пока нет.")
+        return "\n".join(lines)
+
+    for event in events:
+        ts = event.get("timestamp", "")
+        short_ts = ts.replace("T", " ")[:16] if ts else "—"
+        title = event.get("title") or event.get("type") or "event"
+        lines.append(f"• `{short_ts}` — {title}")
 
     return "\n".join(lines)
