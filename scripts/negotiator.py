@@ -12,7 +12,7 @@ import requests
 from typing import Optional
 from datetime import datetime
 
-from deal_pipeline import STAGES, STAGE_LABELS, init_pipeline, move_deal, next_action, stage_label
+from deal_pipeline import STAGES, STAGE_LABELS, init_pipeline, is_terminal_stage, move_deal, next_action, stage_label
 
 ROOT       = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEALS_DIR  = os.path.join(ROOT, "data", "deals", "active")
@@ -66,6 +66,18 @@ def add_event(deal: dict, event_type: str, title: str, data=None, save=False) ->
     if save:
         save_deal(deal)
     return deal
+
+
+def deal_path(deal_id: str, closed=False) -> str:
+    """Return filesystem path for a deal id."""
+    base = CLOSED_DIR if closed else DEALS_DIR
+    return os.path.join(base, f"{deal_id}.json")
+
+
+def load_deal_file(path: str) -> dict:
+    with open(path, encoding="utf-8") as f:
+        return ensure_deal_fields(json.load(f))
+
 
 # ── CRUD сделок ───────────────────────────────────────────────────────────────
 
@@ -126,18 +138,24 @@ def create_deal(offer: dict) -> dict:
 
 def save_deal(deal: dict):
     ensure_deal_fields(deal)
-    path = os.path.join(DEALS_DIR, f"{deal['deal_id']}.json")
+    closed = is_terminal_stage(deal.get("stage"))
+    if closed and not deal.get("archived_at"):
+        deal["archived_at"] = datetime.utcnow().isoformat()
+    path = deal_path(deal["deal_id"], closed=closed)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(deal, f, ensure_ascii=False, indent=2)
+    if closed:
+        active_path = deal_path(deal["deal_id"], closed=False)
+        if os.path.exists(active_path):
+            os.remove(active_path)
 
 
 def get_deal(deal_id: str) -> Optional[dict]:
-    path = os.path.join(DEALS_DIR, f"{deal_id}.json")
-    if not os.path.exists(path):
-        return None
-    with open(path, encoding="utf-8") as f:
-        deal = json.load(f)
-    return ensure_deal_fields(deal)
+    for closed in (False, True):
+        path = deal_path(deal_id, closed=closed)
+        if os.path.exists(path):
+            return load_deal_file(path)
+    return None
 
 
 def update_stage(deal: dict, stage: str) -> dict:
@@ -170,14 +188,32 @@ def add_message(deal: dict, direction: str, text: str) -> dict:
 
 
 def list_deals(stage: Optional[str] = None) -> list:
+    """List active deals only."""
     deals = []
     for fname in os.listdir(DEALS_DIR):
         if not fname.endswith(".json"):
             continue
-        with open(os.path.join(DEALS_DIR, fname), encoding="utf-8") as f:
-            deal = ensure_deal_fields(json.load(f))
+        deal = load_deal_file(os.path.join(DEALS_DIR, fname))
         if stage is None or deal.get("stage") == stage:
             deals.append(deal)
+    return sorted(deals, key=lambda x: x["created_at"], reverse=True)
+
+
+def list_closed_deals(stage: Optional[str] = None) -> list:
+    """List archived terminal deals."""
+    deals = []
+    for fname in os.listdir(CLOSED_DIR):
+        if not fname.endswith(".json"):
+            continue
+        deal = load_deal_file(os.path.join(CLOSED_DIR, fname))
+        if stage is None or deal.get("stage") == stage:
+            deals.append(deal)
+    return sorted(deals, key=lambda x: x["created_at"], reverse=True)
+
+
+def list_all_deals(stage: Optional[str] = None) -> list:
+    """List active and archived deals for analytics."""
+    deals = list_deals(stage=stage) + list_closed_deals(stage=stage)
     return sorted(deals, key=lambda x: x["created_at"], reverse=True)
 
 
@@ -214,7 +250,7 @@ def pipeline_summary(deals=None):
 
 def money_summary(deals=None):
     """Return simple money counters from proposal/payment state."""
-    deals = deals if deals is not None else list_deals()
+    deals = deals if deals is not None else list_all_deals()
     totals = {
         "proposed": 0,
         "prepayment_received": 0,
@@ -277,7 +313,7 @@ def close_deal(deal: dict, stage: str, reason_code="manual", note=None) -> dict:
 
 def loss_summary(deals=None):
     """Return analytics for lost/rejected/scam deals by reason."""
-    deals = deals if deals is not None else list_deals()
+    deals = deals if deals is not None else list_all_deals()
     summary = {"total_lost": 0, "by_reason": {}, "by_stage": {}}
     for deal in deals:
         ensure_deal_fields(deal)
@@ -614,6 +650,7 @@ def record_final_payment(deal: dict, amount=None) -> dict:
     payment["final_payment_status"] = "received"
     payment["final_payment_amount"] = amount
     payment["final_payment_received_at"] = now
+    deal["result"] = "won"
     deal["payments"].append({
         "type": "final_payment",
         "amount": amount,

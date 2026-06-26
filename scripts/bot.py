@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from offer_store import get_offer, update_offer
 from negotiator import (
     create_deal, draft_first_message, update_stage, add_message,
-    format_deal_card, get_deal, save_deal, list_deals, prepare_proposal,
+    format_deal_card, get_deal, save_deal, list_deals, list_closed_deals, prepare_proposal,
     record_prepayment, plan_execution, start_execution, mark_delivered,
     record_final_payment, pipeline_summary, money_summary,
     prepare_followup, mark_followup_sent, list_followup_candidates,
@@ -107,7 +107,7 @@ DEAL_ACTIONS = {
     "DELEGATED": [
         ("⚙️ В работе", "IN_PROGRESS"),
         ("📦 Сдано", "DELIVERED"),
-        ("🏁 Закрыть успешно", "CLOSED_WON"),
+        ("🏁 Закрыть успешно", "record_final_payment"),
         ("🪦 Lost: делегирование", "close_lost_delegated"),
     ],
     "CLIENT_GHOSTED": [
@@ -446,6 +446,7 @@ def cmd_start(msg):
         "/money — деньги по сделкам\n"
         "/followups — кого пора пнуть\n"
         "/losses — причины потерь\n"
+        "/closed — архив закрытых сделок\n"
         "/reset — сбросить историю",
         parse_mode="Markdown")
 
@@ -640,6 +641,24 @@ def cmd_losses(msg):
         lines.append("\n*По стадиям:*")
         for stage, count in sorted(summary["by_stage"].items()):
             lines.append(f"• {stage_label(stage)}: `{count}`")
+    bot.send_message(msg.chat.id, "\n".join(lines), parse_mode="Markdown")
+
+
+@bot.message_handler(commands=["closed"])
+def cmd_closed(msg):
+    deals = list_closed_deals()
+    if not deals:
+        bot.send_message(msg.chat.id, "Архив закрытых сделок пуст.")
+        return
+
+    lines = ["📦 *Закрытые сделки*"]
+    for deal in deals[:10]:
+        contact = deal.get("contact", {})
+        name = contact.get("name") or contact.get("username") or "клиент"
+        result = deal.get("result") or deal.get("stage")
+        lines.append(f"`{deal['deal_id']}` — {stage_label(deal['stage'])} — {result} — {name}")
+    lines.append("\nОткрыть карточку: `/deal ID`")
+    lines.append("История: `/timeline ID`")
     bot.send_message(msg.chat.id, "\n".join(lines), parse_mode="Markdown")
 
 
