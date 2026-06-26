@@ -470,11 +470,54 @@ asyncio.run(send())
         except Exception as e:
             bot.send_message(chat_id, f"❌ Ошибка: {e}")
 
-    elif action == "cancel_draft":
-        deal = get_deal(offer_id)  # offer_id здесь = deal_id
-        if deal:
-            update_stage(deal, "NEW_LEAD")
-        bot.answer_callback_query(call.id, "❌ Черновик отменён")
+    elif action == "send_reply":
+        deal_id = offer_id  # здесь offer_id = deal_id
+        deal = get_deal(deal_id)
+        if not deal:
+            bot.answer_callback_query(call.id, "❌ Сделка не найдена")
+            return
+
+        draft = deal.get("draft", "")
+        username = deal["contact"].get("username")
+        user_id  = deal["contact"].get("user_id")
+
+        bot.answer_callback_query(call.id, "📨 Отправляю...")
+
+        try:
+            import subprocess
+            target = f"'{username}'" if username else str(user_id or 0)
+            script = f"""
+import asyncio, os
+from telethon import TelegramClient
+async def send():
+    c = TelegramClient('scripts/parser_session',
+        int(os.getenv('TELEGRAM_API_ID')),
+        os.getenv('TELEGRAM_API_HASH'))
+    await c.start()
+    await c.send_message({target}, '''{draft}''')
+    await c.disconnect()
+asyncio.run(send())
+"""
+            result = subprocess.run(
+                ["python3", "-c", script],
+                capture_output=True, text=True, timeout=20,
+                env={**os.environ,
+                     "TELEGRAM_API_ID":   os.getenv("TELEGRAM_API_ID", ""),
+                     "TELEGRAM_API_HASH": os.getenv("TELEGRAM_API_HASH", "")}
+            )
+            if result.returncode == 0:
+                add_message(deal, "outgoing", draft)
+                bot.edit_message_reply_markup(chat_id, msg_id, reply_markup=None)
+                bot.send_message(chat_id,
+                    f"✅ *Отправлено!*\nСделка `{deal_id}`",
+                    parse_mode="Markdown")
+            else:
+                bot.send_message(chat_id, f"❌ {result.stderr[:200]}")
+        except Exception as e:
+            bot.send_message(chat_id, f"❌ Ошибка: {e}")
+
+    elif action == "skip_reply":
+        bot.answer_callback_query(call.id, "⏭ Пропущено")
         bot.edit_message_reply_markup(chat_id, msg_id, reply_markup=None)
 
 
