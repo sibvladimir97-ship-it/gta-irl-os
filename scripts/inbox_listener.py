@@ -18,6 +18,7 @@ from negotiator import (
     get_deal, save_deal, update_stage, add_message,
     draft_first_message, list_deals, STAGE_LABELS
 )
+from deal_pipeline import is_terminal_stage, stage_label
 from telethon import TelegramClient, events
 
 API_ID    = int(os.getenv("TELEGRAM_API_ID", "30611066"))
@@ -38,7 +39,7 @@ def find_deal_by_sender(sender_id: int):
     """Ищет активную сделку по user_id отправителя."""
     deals = list_deals()
     for deal in deals:
-        if deal.get("stage") in ["CLOSED", "LOST", "SCAM"]:
+        if is_terminal_stage(deal.get("stage")):
             continue
         contact_id = deal.get("contact", {}).get("user_id")
         if contact_id and int(contact_id) == int(sender_id):
@@ -207,21 +208,22 @@ async def handle_client_reply(sender_id: int, sender_name: str, text: str):
     add_message(deal, "incoming", text)
 
     # Обновляем стадию
-    if stage == "FIRST_MESSAGE_SENT":
-        update_stage(deal, "QUALIFYING")
-        stage = "QUALIFYING"
+    if stage in ["FIRST_MESSAGE_SENT", "WAITING_REPLY"]:
+        update_stage(deal, "CLIENT_REPLIED")
+        update_stage(deal, "BRIEF_COLLECTING")
+        stage = "BRIEF_COLLECTING"
 
     # Извлекаем бюджет/дедлайн
     deal = extract_info(text, deal)
     save_deal(deal)
 
-    stage_label = STAGE_LABELS.get(stage, stage)
+    current_stage_label = stage_label(stage)
     contact_name = deal["contact"].get("name", "Клиент")
 
     # Уведомляем тебя
     send_to_bot(
         f"📨 *Ответ от клиента*\n"
-        f"Сделка: `{deal_id}` | {stage_label}\n"
+        f"Сделка: `{deal_id}` | {current_stage_label}\n"
         f"👤 {contact_name}\n\n"
         f"_{text[:300]}_"
         + (f"\n\n💰 Бюджет: {deal['budget']}" if deal.get('budget') else "")

@@ -11,6 +11,8 @@ import requests
 from typing import Optional
 from datetime import datetime
 
+from deal_pipeline import STAGES, STAGE_LABELS, init_pipeline, move_deal, next_action, stage_label
+
 ROOT       = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEALS_DIR  = os.path.join(ROOT, "data", "deals", "active")
 CLOSED_DIR = os.path.join(ROOT, "data", "deals", "closed")
@@ -19,37 +21,6 @@ os.makedirs(CLOSED_DIR, exist_ok=True)
 
 GROQ_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
-
-# ── Стадии сделки ─────────────────────────────────────────────────────────────
-
-STAGES = [
-    "NEW_LEAD",
-    "FIRST_MESSAGE_DRAFTED",
-    "FIRST_MESSAGE_SENT",
-    "WAITING_REPLY",
-    "QUALIFYING",
-    "OFFER_SENT",
-    "WAITING_PREPAYMENT",
-    "IN_WORK",
-    "CLOSED",
-    "LOST",
-    "SCAM",
-]
-
-STAGE_LABELS = {
-    "NEW_LEAD":              "🆕 Новый лид",
-    "FIRST_MESSAGE_DRAFTED": "✏️ Черновик готов",
-    "FIRST_MESSAGE_SENT":    "📨 Первое сообщение отправлено",
-    "WAITING_REPLY":         "⏳ Ждём ответа",
-    "QUALIFYING":            "🔍 Квалификация",
-    "OFFER_SENT":            "📋 КП отправлено",
-    "WAITING_PREPAYMENT":    "💳 Ждём предоплату",
-    "IN_WORK":               "⚙️ В работе",
-    "CLOSED":                "✅ Закрыто",
-    "LOST":                  "❌ Потеряно",
-    "SCAM":                  "🚫 Скам",
-}
-
 
 # ── CRUD сделок ───────────────────────────────────────────────────────────────
 
@@ -77,11 +48,13 @@ def create_deal(offer: dict) -> dict:
         "deadline":   None,
         "result":     None,
     }
+    init_pipeline(deal)
     save_deal(deal)
     return deal
 
 
 def save_deal(deal: dict):
+    init_pipeline(deal)
     path = os.path.join(DEALS_DIR, f"{deal['deal_id']}.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(deal, f, ensure_ascii=False, indent=2)
@@ -92,13 +65,12 @@ def get_deal(deal_id: str) -> Optional[dict]:
     if not os.path.exists(path):
         return None
     with open(path, encoding="utf-8") as f:
-        return json.load(f)
+        deal = json.load(f)
+    return init_pipeline(deal)
 
 
 def update_stage(deal: dict, stage: str) -> dict:
-    assert stage in STAGES, f"Unknown stage: {stage}"
-    deal["stage"] = stage
-    deal["updated_at"] = datetime.utcnow().isoformat()
+    move_deal(deal, stage, reason="manual_update")
     save_deal(deal)
     return deal
 
@@ -182,7 +154,8 @@ def draft_offer(deal: dict, budget: str, deadline: str, scope: str) -> str:
 # ── Форматирование карточки сделки ────────────────────────────────────────────
 
 def format_deal_card(deal: dict) -> str:
-    stage_label = STAGE_LABELS.get(deal["stage"], deal["stage"])
+    init_pipeline(deal)
+    current_stage_label = stage_label(deal["stage"])
     contact = deal["contact"]
     name = contact.get("name", "?")
     username = contact.get("username")
@@ -190,7 +163,8 @@ def format_deal_card(deal: dict) -> str:
 
     lines = [
         f"📋 *Сделка {deal['deal_id']}*",
-        f"Стадия: {stage_label}",
+        f"Стадия: {current_stage_label}",
+        f"Следующий шаг: {deal.get('next_action') or next_action(deal['stage'])}",
         f"Контакт: {contact_display} ({name})",
         f"Источник: {deal['source']['chat']}",
         f"",

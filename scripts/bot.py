@@ -393,6 +393,7 @@ def handle_callback(call):
         bot.answer_callback_query(call.id, "⏳ Генерирую черновик...")
         deal = create_deal(offer)
         update_offer(offer_id, status="RESPONDED", deal_id=deal["deal_id"])
+        update_stage(deal, "RESPOND_DECIDED")
         update_stage(deal, "FIRST_MESSAGE_DRAFTED")
 
         draft = draft_first_message(deal)
@@ -460,10 +461,11 @@ asyncio.run(send())
             )
             if result.returncode == 0:
                 update_stage(deal, "FIRST_MESSAGE_SENT")
+                update_stage(deal, "WAITING_REPLY")
                 add_message(deal, "outgoing", draft)
                 bot.edit_message_reply_markup(chat_id, msg_id, reply_markup=None)
                 bot.send_message(chat_id,
-                    f"✅ *Отклик отправлен!*\nСделка `{deal_id}` → стадия: 📨 Отправлено\n\nЖдём ответа...",
+                    f"✅ *Отклик отправлен!*\nСделка `{deal_id}` → стадия: ⏳ ждём ответ клиента.\n\nСледующий шаг: контролировать входящий ответ.",
                     parse_mode="Markdown")
             else:
                 bot.send_message(chat_id, f"❌ Ошибка отправки: {result.stderr[:200]}")

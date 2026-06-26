@@ -9,6 +9,7 @@ GTA IRL OS — Offer Parser v3
 import os
 import asyncio
 import hashlib
+import re
 import requests
 from datetime import datetime, timezone, timedelta
 from telethon import TelegramClient, events
@@ -17,6 +18,7 @@ from telethon import TelegramClient, events
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from offer_store import create_offer, update_offer, validate_contact_url
+from deal_pipeline import is_terminal_stage
 
 API_ID    = int(os.getenv("TELEGRAM_API_ID", "30611066"))
 API_HASH  = os.getenv("TELEGRAM_API_HASH", "86864ae4d512125ab1fcc930da6a6f5b")
@@ -433,7 +435,7 @@ async def main():
         deals = list_deals()
         matched = None
         for deal in deals:
-            if deal.get("stage") in ["CLOSED", "LOST", "SCAM"]:
+            if is_terminal_stage(deal.get("stage")):
                 continue
             if deal.get("contact", {}).get("user_id") and int(deal["contact"]["user_id"]) == int(sender_id):
                 matched = deal
@@ -442,8 +444,9 @@ async def main():
             return
         deal_id = matched["deal_id"]
         add_message(matched, "incoming", text)
-        if matched.get("stage") == "FIRST_MESSAGE_SENT":
-            update_stage(matched, "QUALIFYING")
+        if matched.get("stage") in ["FIRST_MESSAGE_SENT", "WAITING_REPLY"]:
+            update_stage(matched, "CLIENT_REPLIED")
+            update_stage(matched, "BRIEF_COLLECTING")
         # Уведомляем
         send_text(
             f"📨 *Ответ клиента*\nСделка `{deal_id}`\n👤 {sender_name}\n\n_{text[:300]}_"
