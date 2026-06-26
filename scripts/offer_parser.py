@@ -178,6 +178,9 @@ async def scan_history(client, entity, chat_name, chat_username, hours=24):
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     count = 0
     async for msg in client.iter_messages(entity, limit=1000):
+        # Проверяем стоп-файл на каждой итерации
+        if os.path.exists(STOP_FILE):
+            return count
         if not msg.date or msg.date < cutoff:
             break
         text = msg.text or ""
