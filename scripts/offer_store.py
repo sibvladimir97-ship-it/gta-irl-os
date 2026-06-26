@@ -25,6 +25,7 @@ def create_offer(
     msg_date: str,
     keywords: list,
     ai_score: Optional[str] = None,
+    score: Optional[dict] = None,
 ) -> dict:
     """Создаёт оффер. Raw поля защищены от изменений AI."""
 
@@ -52,6 +53,7 @@ def create_offer(
             "date":         msg_date,
             "keywords":     keywords,
             "ai_score":     ai_score,   # оценка AI — только display, не влияет на raw
+            "score":        score,
             "preview":      raw_text[:350] + ("..." if len(raw_text) > 350 else ""),
         },
         "deal_id": None,  # заполняется когда создаётся сделка

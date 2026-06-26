@@ -19,6 +19,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from offer_store import create_offer, update_offer, validate_contact_url
 from deal_pipeline import is_terminal_stage
+from offer_scoring import score_offer, format_score
 
 API_ID    = int(os.getenv("TELEGRAM_API_ID", "30611066"))
 API_HASH  = os.getenv("TELEGRAM_API_HASH", "86864ae4d512125ab1fcc930da6a6f5b")
@@ -143,7 +144,9 @@ def send_offer_card(offer: dict):
     raw = offer["raw"]
     offer_id = offer["offer_id"]
 
-    scam_flag = "🚫 *ВОЗМОЖНЫЙ СКАМ*\n" if is_scam(offer["raw_text"]) else ""
+    local_score = d.get("score") or {}
+    risky = is_scam(offer["raw_text"]) or local_score.get("risk") == "high"
+    scam_flag = "🚫 *ВОЗМОЖНЫЙ СКАМ*\n" if risky else ""
 
     # Строим блок контакта
     username      = raw.get("sender_username")
@@ -189,6 +192,9 @@ def send_offer_card(offer: dict):
 
     if d.get("ai_score"):
         text += f"\n\n{d['ai_score']}"
+
+    if d.get("score"):
+        text += f"\n\n*Локальная оценка GTA IRL OS:*\n{safe_md(format_score(d['score']))}"
 
     keyboard = {
         "inline_keyboard": [[
@@ -277,6 +283,7 @@ async def process_message(msg, client, chat_name, chat_username, is_history=Fals
         return
 
     date_str = msg.date.strftime("%d.%m %H:%M") if hasattr(msg.date, 'strftime') else str(msg.date)
+    local_score = score_offer(text, keywords)
     score = ai_score(text, chat_name)
 
     # Лучший доступный контакт: sender > упомянут в тексте > tg://user?id=
@@ -298,6 +305,7 @@ async def process_message(msg, client, chat_name, chat_username, is_history=Fals
         msg_date=date_str,
         keywords=keywords,
         ai_score=score,
+        score=local_score,
     )
 
     # Сохраняем все упоминания и contact_url
