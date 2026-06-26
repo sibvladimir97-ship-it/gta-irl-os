@@ -20,6 +20,8 @@ from offer_store import get_offer, update_offer
 from negotiator import (
     create_deal, draft_first_message, update_stage, add_message,
     format_deal_card, get_deal, save_deal, list_deals, prepare_proposal,
+    record_prepayment, plan_execution, start_execution, mark_delivered,
+    record_final_payment,
 )
 from deal_pipeline import is_terminal_stage, stage_label
 
@@ -67,33 +69,33 @@ DEAL_ACTIONS = {
     ],
     "PROPOSAL_SENT": [
         ("💳 Ждём предоплату", "PREPAYMENT_WAITING"),
-        ("💰 Предоплата получена", "PREPAYMENT_RECEIVED"),
+        ("💰 Предоплата получена", "record_prepayment"),
         ("👻 Клиент пропал", "CLIENT_GHOSTED"),
     ],
     "PREPAYMENT_WAITING": [
-        ("💰 Предоплата получена", "PREPAYMENT_RECEIVED"),
+        ("💰 Предоплата получена", "record_prepayment"),
         ("👻 Клиент пропал", "CLIENT_GHOSTED"),
         ("🪦 Закрыть lost", "CLOSED_LOST"),
     ],
     "PREPAYMENT_RECEIVED": [
-        ("🧭 План исполнения", "EXECUTION_PLANNING"),
+        ("🧭 План исполнения", "plan_execution"),
         ("📤 Делегировать", "DELEGATED"),
         ("❌ Отказаться", "REJECTED"),
     ],
     "EXECUTION_PLANNING": [
-        ("⚙️ В работу", "IN_PROGRESS"),
+        ("⚙️ В работу", "start_execution"),
         ("📤 Делегировать", "DELEGATED"),
     ],
     "IN_PROGRESS": [
-        ("📦 Сдано", "DELIVERED"),
+        ("📦 Сдано", "mark_delivered"),
         ("📤 Делегировать", "DELEGATED"),
     ],
     "DELIVERED": [
         ("🧾 Ждём доплату", "FINAL_PAYMENT_WAITING"),
-        ("🏁 Закрыть успешно", "CLOSED_WON"),
+        ("🏁 Закрыть успешно", "record_final_payment"),
     ],
     "FINAL_PAYMENT_WAITING": [
-        ("🏁 Закрыть успешно", "CLOSED_WON"),
+        ("💰 Доплата получена", "record_final_payment"),
         ("🪦 Закрыть lost", "CLOSED_LOST"),
     ],
     "DELEGATED": [
@@ -608,6 +610,61 @@ def handle_callback(call):
                 )
             else:
                 bot.send_message(chat_id, f"❌ Ошибка отправки КП: {result.stderr[:200]}")
+                return
+
+        elif next_stage == "record_prepayment":
+            try:
+                deal = record_prepayment(deal)
+                bot.answer_callback_query(call.id, "💰 Предоплата записана")
+                bot.send_message(
+                    chat_id,
+                    f"💰 Предоплата записана по сделке `{deal_id}`.\nСледующий шаг: план исполнения.",
+                    parse_mode="Markdown",
+                )
+            except ValueError as e:
+                bot.answer_callback_query(call.id, "⛔ Нельзя записать предоплату")
+                bot.send_message(chat_id, f"⛔ Предоплата не записана: `{e}`", parse_mode="Markdown")
+                return
+
+        elif next_stage == "plan_execution":
+            try:
+                deal = plan_execution(deal)
+                bot.answer_callback_query(call.id, "🧭 План исполнения")
+            except ValueError as e:
+                bot.answer_callback_query(call.id, "⛔ Нельзя перейти к плану")
+                bot.send_message(chat_id, f"⛔ План исполнения не создан: `{e}`", parse_mode="Markdown")
+                return
+
+        elif next_stage == "start_execution":
+            try:
+                deal = start_execution(deal)
+                bot.answer_callback_query(call.id, "⚙️ Сделка в работе")
+            except ValueError as e:
+                bot.answer_callback_query(call.id, "⛔ Нельзя начать работу")
+                bot.send_message(chat_id, f"⛔ Работа не начата: `{e}`", parse_mode="Markdown")
+                return
+
+        elif next_stage == "mark_delivered":
+            try:
+                deal = mark_delivered(deal)
+                bot.answer_callback_query(call.id, "📦 Сдано клиенту")
+            except ValueError as e:
+                bot.answer_callback_query(call.id, "⛔ Нельзя отметить сдачу")
+                bot.send_message(chat_id, f"⛔ Сдача не записана: `{e}`", parse_mode="Markdown")
+                return
+
+        elif next_stage == "record_final_payment":
+            try:
+                deal = record_final_payment(deal)
+                bot.answer_callback_query(call.id, "🏁 Сделка закрыта")
+                bot.send_message(
+                    chat_id,
+                    f"🏁 Сделка `{deal_id}` закрыта успешно. Финальная оплата записана.",
+                    parse_mode="Markdown",
+                )
+            except ValueError as e:
+                bot.answer_callback_query(call.id, "⛔ Нельзя закрыть сделку")
+                bot.send_message(chat_id, f"⛔ Сделка не закрыта: `{e}`", parse_mode="Markdown")
                 return
 
         elif next_stage != "refresh":

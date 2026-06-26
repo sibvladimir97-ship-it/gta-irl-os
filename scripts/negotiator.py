@@ -22,6 +22,32 @@ os.makedirs(CLOSED_DIR, exist_ok=True)
 GROQ_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
+
+def ensure_deal_fields(deal: dict) -> dict:
+    """Backfill business fields for old and new deals."""
+    init_pipeline(deal)
+    deal.setdefault("messages", [])
+    deal.setdefault("notes", [])
+    deal.setdefault("brief", {})
+    deal.setdefault("proposal", None)
+    deal.setdefault("payments", [])
+    deal.setdefault("payment", {
+        "prepayment_status": "pending",
+        "prepayment_amount": None,
+        "prepayment_received_at": None,
+        "final_payment_status": "pending",
+        "final_payment_amount": None,
+        "final_payment_received_at": None,
+    })
+    deal.setdefault("execution", {
+        "mode": None,
+        "status": "not_started",
+        "planned_at": None,
+        "started_at": None,
+        "delivered_at": None,
+    })
+    return deal
+
 # ── CRUD сделок ───────────────────────────────────────────────────────────────
 
 def create_deal(offer: dict) -> dict:
@@ -46,17 +72,33 @@ def create_deal(offer: dict) -> dict:
         "notes":      [],   # заметки
         "brief":      {},
         "proposal":   None,
+        "payments":   [],
+        "payment": {
+            "prepayment_status": "pending",
+            "prepayment_amount": None,
+            "prepayment_received_at": None,
+            "final_payment_status": "pending",
+            "final_payment_amount": None,
+            "final_payment_received_at": None,
+        },
+        "execution": {
+            "mode": None,
+            "status": "not_started",
+            "planned_at": None,
+            "started_at": None,
+            "delivered_at": None,
+        },
         "budget":     None,
         "deadline":   None,
         "result":     None,
     }
-    init_pipeline(deal)
+    ensure_deal_fields(deal)
     save_deal(deal)
     return deal
 
 
 def save_deal(deal: dict):
-    init_pipeline(deal)
+    ensure_deal_fields(deal)
     path = os.path.join(DEALS_DIR, f"{deal['deal_id']}.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(deal, f, ensure_ascii=False, indent=2)
@@ -68,7 +110,7 @@ def get_deal(deal_id: str) -> Optional[dict]:
         return None
     with open(path, encoding="utf-8") as f:
         deal = json.load(f)
-    return init_pipeline(deal)
+    return ensure_deal_fields(deal)
 
 
 def update_stage(deal: dict, stage: str) -> dict:
@@ -94,7 +136,7 @@ def list_deals(stage: Optional[str] = None) -> list:
         if not fname.endswith(".json"):
             continue
         with open(os.path.join(DEALS_DIR, fname), encoding="utf-8") as f:
-            deal = init_pipeline(json.load(f))
+            deal = ensure_deal_fields(json.load(f))
         if stage is None or deal.get("stage") == stage:
             deals.append(deal)
     return sorted(deals, key=lambda x: x["created_at"], reverse=True)
@@ -202,10 +244,91 @@ def prepare_proposal(deal: dict) -> dict:
     return deal
 
 
+def record_prepayment(deal: dict, amount=None) -> dict:
+    """Record that prepayment was received and move deal forward."""
+    ensure_deal_fields(deal)
+    proposal = deal.get("proposal") or {}
+    amount = amount or proposal.get("budget") or deal.get("budget") or "не указано"
+    now = datetime.utcnow().isoformat()
+
+    payment = deal["payment"]
+    payment["prepayment_status"] = "received"
+    payment["prepayment_amount"] = amount
+    payment["prepayment_received_at"] = now
+    deal["payments"].append({
+        "type": "prepayment",
+        "amount": amount,
+        "received_at": now,
+        "note": "marked_from_telegram",
+    })
+    move_deal(deal, "PREPAYMENT_RECEIVED", reason="prepayment_received")
+    save_deal(deal)
+    return deal
+
+
+def plan_execution(deal: dict, mode="self") -> dict:
+    """Mark execution planning after prepayment."""
+    ensure_deal_fields(deal)
+    execution = deal["execution"]
+    execution["mode"] = mode
+    execution["status"] = "planning"
+    execution["planned_at"] = datetime.utcnow().isoformat()
+    move_deal(deal, "EXECUTION_PLANNING", reason="execution_planning")
+    save_deal(deal)
+    return deal
+
+
+def start_execution(deal: dict, mode=None) -> dict:
+    """Mark work as started."""
+    ensure_deal_fields(deal)
+    execution = deal["execution"]
+    if mode:
+        execution["mode"] = mode
+    execution["mode"] = execution.get("mode") or "self"
+    execution["status"] = "in_progress"
+    execution["started_at"] = datetime.utcnow().isoformat()
+    move_deal(deal, "IN_PROGRESS", reason="execution_started")
+    save_deal(deal)
+    return deal
+
+
+def mark_delivered(deal: dict) -> dict:
+    """Mark delivery to client."""
+    ensure_deal_fields(deal)
+    execution = deal["execution"]
+    execution["status"] = "delivered"
+    execution["delivered_at"] = datetime.utcnow().isoformat()
+    move_deal(deal, "DELIVERED", reason="delivered")
+    save_deal(deal)
+    return deal
+
+
+def record_final_payment(deal: dict, amount=None) -> dict:
+    """Record final payment and close the deal as won."""
+    ensure_deal_fields(deal)
+    proposal = deal.get("proposal") or {}
+    amount = amount or proposal.get("budget") or deal.get("budget") or "не указано"
+    now = datetime.utcnow().isoformat()
+
+    payment = deal["payment"]
+    payment["final_payment_status"] = "received"
+    payment["final_payment_amount"] = amount
+    payment["final_payment_received_at"] = now
+    deal["payments"].append({
+        "type": "final_payment",
+        "amount": amount,
+        "received_at": now,
+        "note": "marked_from_telegram",
+    })
+    move_deal(deal, "CLOSED_WON", reason="final_payment_received")
+    save_deal(deal)
+    return deal
+
+
 # ── Форматирование карточки сделки ────────────────────────────────────────────
 
 def format_deal_card(deal: dict) -> str:
-    init_pipeline(deal)
+    ensure_deal_fields(deal)
     current_stage_label = stage_label(deal["stage"])
     contact = deal["contact"]
     name = contact.get("name", "?")
@@ -232,6 +355,18 @@ def format_deal_card(deal: dict) -> str:
         preview = (proposal.get("text") or "").replace("\n", " ")[:160]
         if preview:
             lines.append(f"_{preview}..._")
+    payment = deal.get("payment") or {}
+    if payment.get("prepayment_status") == "received":
+        lines.append(f"💳 Предоплата: получена ({payment.get('prepayment_amount') or 'сумма не указана'})")
+    elif deal["stage"] in ["PROPOSAL_SENT", "PREPAYMENT_WAITING"]:
+        lines.append("💳 Предоплата: ожидается")
+    if payment.get("final_payment_status") == "received":
+        lines.append(f"🧾 Доплата: получена ({payment.get('final_payment_amount') or 'сумма не указана'})")
+    elif deal["stage"] == "FINAL_PAYMENT_WAITING":
+        lines.append("🧾 Доплата: ожидается")
+    execution = deal.get("execution") or {}
+    if execution.get("status") and execution.get("status") != "not_started":
+        lines.append(f"⚙️ Исполнение: {execution.get('status')}")
     if deal["messages"]:
         last = deal["messages"][-1]
         arrow = "→" if last["direction"] == "outgoing" else "←"
