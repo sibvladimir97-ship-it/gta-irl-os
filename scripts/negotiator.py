@@ -10,7 +10,7 @@ import os
 import re
 import requests
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, date
 
 from deal_pipeline import STAGES, STAGE_LABELS, init_pipeline, is_terminal_stage, move_deal, next_action, stage_label
 
@@ -344,6 +344,136 @@ def list_followup_candidates(deals=None):
     """List active deals that can benefit from a follow-up draft."""
     deals = deals if deals is not None else list_deals()
     return [deal for deal in deals if needs_followup(deal)]
+
+
+def parse_deal_deadline(value):
+    """Parse simple deal deadline formats into a date."""
+    if not value:
+        return None
+    text = str(value).strip()
+    patterns = [
+        r"(\d{4}-\d{2}-\d{2})",
+        r"(\d{2})\.(\d{2})\.(\d{4})",
+        r"(\d{1,2})/(\d{1,2})/(\d{4})",
+    ]
+    iso_match = re.search(patterns[0], text)
+    if iso_match:
+        try:
+            return date.fromisoformat(iso_match.group(1))
+        except ValueError:
+            return None
+    dot_match = re.search(patterns[1], text)
+    if dot_match:
+        day, month, year = dot_match.groups()
+        try:
+            return date(int(year), int(month), int(day))
+        except ValueError:
+            return None
+    slash_match = re.search(patterns[2], text)
+    if slash_match:
+        day, month, year = slash_match.groups()
+        try:
+            return date(int(year), int(month), int(day))
+        except ValueError:
+            return None
+    return None
+
+
+def parse_event_datetime(value):
+    """Parse stored ISO datetimes safely."""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+
+
+def last_activity_at(deal: dict):
+    """Return the latest known activity timestamp for attention checks."""
+    ensure_deal_fields(deal)
+    candidates = [
+        deal.get("updated_at"),
+        deal.get("created_at"),
+    ]
+    if deal.get("stage_history"):
+        candidates.append(deal["stage_history"][-1].get("at"))
+    if deal.get("events"):
+        candidates.append(deal["events"][-1].get("timestamp"))
+    if deal.get("messages"):
+        candidates.append(deal["messages"][-1].get("timestamp"))
+
+    parsed = [parse_event_datetime(value) for value in candidates]
+    parsed = [value for value in parsed if value]
+    return max(parsed) if parsed else None
+
+
+def days_since(value) -> Optional[int]:
+    if not value:
+        return None
+    return max((datetime.utcnow() - value).days, 0)
+
+
+def deal_attention_item(deal: dict) -> Optional[dict]:
+    """Return a control-tower item for active deals that need attention."""
+    ensure_deal_fields(deal)
+    if is_terminal_stage(deal.get("stage")):
+        return None
+
+    stage = deal.get("stage")
+    deadline = parse_deal_deadline(deal.get("deadline"))
+    days_to_deadline = (deadline - date.today()).days if deadline else None
+    inactive_days = days_since(last_activity_at(deal))
+    reasons = []
+    score = 0
+
+    if days_to_deadline is not None:
+        if days_to_deadline < 0:
+            reasons.append(f"дедлайн просрочен на {abs(days_to_deadline)} дн.")
+            score += 100
+        elif days_to_deadline == 0:
+            reasons.append("дедлайн сегодня")
+            score += 90
+        elif days_to_deadline <= 2:
+            reasons.append(f"дедлайн через {days_to_deadline} дн.")
+            score += 75
+
+    if stage in ["PREPAYMENT_WAITING", "FINAL_PAYMENT_WAITING"]:
+        reasons.append("ожидаем оплату")
+        score += 65
+    elif stage in ["IN_PROGRESS", "DELEGATED"]:
+        reasons.append("контроль исполнения")
+        score += 45
+    elif stage == "DELIVERED":
+        reasons.append("сдано — надо закрыть доплату/результат")
+        score += 55
+    elif stage in ["WAITING_REPLY", "BRIEF_COLLECTING", "CLIENT_GHOSTED"]:
+        reasons.append("ждём клиента")
+        score += 35
+
+    if inactive_days is not None and inactive_days >= 2:
+        reasons.append(f"нет движения {inactive_days} дн.")
+        score += min(inactive_days * 5, 30)
+
+    if not reasons:
+        return None
+
+    return {
+        "deal": deal,
+        "score": score,
+        "reasons": reasons,
+        "inactive_days": inactive_days,
+        "days_to_deadline": days_to_deadline,
+    }
+
+
+def attention_summary(deals=None, limit=10):
+    """Return active deals sorted by operational urgency."""
+    deals = deals if deals is not None else list_deals()
+    items = [deal_attention_item(deal) for deal in deals]
+    items = [item for item in items if item]
+    items.sort(key=lambda item: item["score"], reverse=True)
+    return items[:limit]
 
 
 # ── AI черновик ───────────────────────────────────────────────────────────────

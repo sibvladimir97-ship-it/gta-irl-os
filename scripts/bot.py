@@ -23,7 +23,7 @@ from negotiator import (
     record_prepayment, plan_execution, start_execution, mark_delivered,
     record_final_payment, pipeline_summary, money_summary,
     prepare_followup, mark_followup_sent, list_followup_candidates,
-    format_deal_timeline, close_deal, loss_summary,
+    format_deal_timeline, close_deal, loss_summary, attention_summary,
 )
 from deal_pipeline import is_terminal_stage, stage_label
 
@@ -443,6 +443,7 @@ def cmd_start(msg):
         "/deal ID — карточка сделки\n"
         "/timeline ID — история сделки\n"
         "/pipeline — дашборд воронки\n"
+        "/attention — что требует внимания\n"
         "/money — деньги по сделкам\n"
         "/followups — кого пора пнуть\n"
         "/losses — причины потерь\n"
@@ -586,6 +587,28 @@ def cmd_pipeline(msg):
             lines.append(f"`{deal['deal_id']}` — {stage_label(deal['stage'])} — {name}")
 
     lines.append("\nОткрыть сделку: `/deal ID`")
+    bot.send_message(msg.chat.id, "\n".join(lines), parse_mode="Markdown")
+
+
+@bot.message_handler(commands=["attention"])
+def cmd_attention(msg):
+    items = attention_summary()
+    if not items:
+        bot.send_message(msg.chat.id, "🟢 Контроль чистый: срочных сделок нет.")
+        return
+
+    lines = ["🚨 *GTA IRL OS — Контроль сделок*"]
+    for item in items:
+        deal = item["deal"]
+        contact = deal.get("contact", {})
+        name = contact.get("name") or contact.get("username") or "клиент"
+        reasons = "; ".join(item["reasons"])
+        lines.append(
+            f"`{deal['deal_id']}` — {stage_label(deal['stage'])} — {name}\n"
+            f"↳ {reasons}"
+        )
+
+    lines.append("\nОткрыть карточку: `/deal ID`")
     bot.send_message(msg.chat.id, "\n".join(lines), parse_mode="Markdown")
 
 
