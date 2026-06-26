@@ -134,7 +134,6 @@ def safe_md(text: str) -> str:
 
 
 def send_offer_card(offer: dict):
-    """Отправляет карточку оффера с inline-кнопками."""
     if not OWNER_CHAT_ID or not BOT_TOKEN:
         return
 
@@ -144,28 +143,44 @@ def send_offer_card(offer: dict):
 
     scam_flag = "🚫 *ВОЗМОЖНЫЙ СКАМ*\n" if is_scam(offer["raw_text"]) else ""
 
-    # Безопасное отображение контакта
-    username = raw.get("sender_username")
-    sender_name = safe_md(d["sender_name"])
+    # Строим блок контакта
+    username      = raw.get("sender_username")
+    text_username = raw.get("text_username")
+    sender_id     = raw.get("sender_id")
+    sender_name   = safe_md(d["sender_name"])
+    all_mentions  = raw.get("all_mentions", [])
+
+    contact_lines = []
+
+    # Отправитель
     if username:
-        clean_username = username.lstrip("@")
-        contact_display = f"[{sender_name}](https://t.me/{clean_username})"
+        clean = username.lstrip("@")
+        contact_lines.append(f"[{sender_name} @{clean}](https://t.me/{clean})")
+    elif sender_id:
+        contact_lines.append(f"[{sender_name}](tg://user?id={sender_id})")
     else:
-        sender_id = raw.get("sender_id")
-        contact_display = f"[{sender_name}](tg://user?id={sender_id})" if sender_id else sender_name
+        contact_lines.append(sender_name)
+
+    # Упомянутые в тексте (кроме уже показанного)
+    shown = {username.lstrip("@") if username else ""}
+    for mention in all_mentions:
+        if mention not in shown and mention.lower() != "username":
+            contact_lines.append(f"[@{mention}](https://t.me/{mention})")
+            shown.add(mention)
+
+    contact_block = " | ".join(contact_lines)
 
     # Ссылка на сообщение
     msg_url = raw.get("msg_url")
     source_display = f"[{safe_md(d['chat_name'])}]({msg_url})" if msg_url else safe_md(d['chat_name'])
 
-    # Превью текста — без Markdown обработки AI
     preview = safe_md(d["preview"])
 
     text = (
         f"{scam_flag}"
         f"🎯 *Оффер* `{offer_id}` | {d['date']}\n"
         f"📍 {source_display}\n"
-        f"👤 {contact_display}\n"
+        f"👤 {contact_block}\n"
         f"🔑 {', '.join(d['keywords'][:3])}\n\n"
         f"{preview}"
     )
@@ -173,7 +188,6 @@ def send_offer_card(offer: dict):
     if d.get("ai_score"):
         text += f"\n\n{d['ai_score']}"
 
-    # Inline кнопки
     keyboard = {
         "inline_keyboard": [[
             {"text": "✅ Откликнуться", "callback_data": f"respond:{offer_id}"},
@@ -219,13 +233,25 @@ def send_text(text: str):
 async def get_sender_info(msg, client):
     try:
         sender = await msg.get_sender()
-        return {
-            "id":         getattr(sender, "id", None),
-            "username":   getattr(sender, "username", None),
-            "first_name": getattr(sender, "first_name", "") or "",
-        }
+        username  = getattr(sender, "username", None)
+        firstName = getattr(sender, "first_name", "") or ""
+        sender_id = getattr(sender, "id", None)
     except:
-        return {"id": None, "username": None, "first_name": "Неизвестно"}
+        username, firstName, sender_id = None, "Аноним", None
+
+    # Ищем @username прямо в тексте оффера
+    text = msg.text or ""
+    mentioned = re.findall(r'@([a-zA-Z0-9_]{4,})', text)
+    # Берём первый упомянутый username если у sender нет своего
+    text_username = mentioned[0] if mentioned else None
+
+    return {
+        "id":           sender_id,
+        "username":     username,
+        "text_username": text_username,   # username из текста оффера
+        "first_name":   firstName,
+        "all_mentions": mentioned,
+    }
 
 
 async def process_message(msg, client, chat_name, chat_username, is_history=False):
@@ -251,6 +277,14 @@ async def process_message(msg, client, chat_name, chat_username, is_history=Fals
     date_str = msg.date.strftime("%d.%m %H:%M") if hasattr(msg.date, 'strftime') else str(msg.date)
     score = ai_score(text, chat_name)
 
+    # Лучший доступный контакт: sender > упомянут в тексте > tg://user?id=
+    best_username = sender_info["username"] or sender_info.get("text_username")
+    contact_url = None
+    if best_username:
+        contact_url = f"https://t.me/{best_username}"
+    elif sender_id:
+        contact_url = f"tg://user?id={sender_id}"
+
     offer = create_offer(
         raw_text=text,
         chat_name=chat_name,
@@ -258,11 +292,17 @@ async def process_message(msg, client, chat_name, chat_username, is_history=Fals
         msg_id=msg.id,
         sender_id=sender_id,
         sender_name=sender_info["first_name"] or "Аноним",
-        sender_username=sender_info["username"],
+        sender_username=best_username,
         msg_date=date_str,
         keywords=keywords,
         ai_score=score,
     )
+
+    # Сохраняем все упоминания и contact_url
+    if contact_url:
+        offer["raw"]["contact_url"] = contact_url
+    offer["raw"]["all_mentions"]  = sender_info.get("all_mentions", [])
+    offer["raw"]["text_username"] = sender_info.get("text_username")
 
     send_offer_card(offer)
     prefix = "📚" if is_history else "🆕"
