@@ -92,7 +92,7 @@ def list_deals(stage: Optional[str] = None) -> list:
         if not fname.endswith(".json"):
             continue
         with open(os.path.join(DEALS_DIR, fname), encoding="utf-8") as f:
-            deal = json.load(f)
+            deal = init_pipeline(json.load(f))
         if stage is None or deal.get("stage") == stage:
             deals.append(deal)
     return sorted(deals, key=lambda x: x["created_at"], reverse=True)

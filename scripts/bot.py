@@ -15,7 +15,11 @@ from datetime import date, datetime
 import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from offer_store import get_offer, update_offer
-from negotiator import create_deal, draft_first_message, update_stage, add_message, format_deal_card, get_deal, save_deal
+from negotiator import (
+    create_deal, draft_first_message, update_stage, add_message,
+    format_deal_card, get_deal, save_deal, list_deals,
+)
+from deal_pipeline import is_terminal_stage, stage_label
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 GROQ_API_KEY   = os.getenv("GROQ_API_KEY", "")
@@ -32,6 +36,109 @@ DAILY_DIR     = os.path.join(SURVIVAL, "daily")
 
 bot = telebot.TeleBot(TELEGRAM_TOKEN)
 chat_history = {}
+
+
+DEAL_ACTIONS = {
+    "WAITING_REPLY": [
+        ("👻 Клиент пропал", "CLIENT_GHOSTED"),
+        ("🪦 Закрыть lost", "CLOSED_LOST"),
+    ],
+    "CLIENT_REPLIED": [
+        ("🔍 Собирать ТЗ", "BRIEF_COLLECTING"),
+        ("✅ ТЗ собрано", "BRIEF_READY"),
+        ("❌ Отказаться", "REJECTED"),
+    ],
+    "BRIEF_COLLECTING": [
+        ("✅ ТЗ собрано", "BRIEF_READY"),
+        ("👻 Клиент пропал", "CLIENT_GHOSTED"),
+        ("❌ Отказаться", "REJECTED"),
+    ],
+    "BRIEF_READY": [
+        ("📋 Подготовить КП", "PROPOSAL_DRAFTED"),
+        ("📤 Делегировать", "DELEGATED"),
+        ("❌ Отказаться", "REJECTED"),
+    ],
+    "PROPOSAL_DRAFTED": [
+        ("📤 КП отправлено", "PROPOSAL_SENT"),
+        ("❌ Отказаться", "REJECTED"),
+    ],
+    "PROPOSAL_SENT": [
+        ("💳 Ждём предоплату", "PREPAYMENT_WAITING"),
+        ("💰 Предоплата получена", "PREPAYMENT_RECEIVED"),
+        ("👻 Клиент пропал", "CLIENT_GHOSTED"),
+    ],
+    "PREPAYMENT_WAITING": [
+        ("💰 Предоплата получена", "PREPAYMENT_RECEIVED"),
+        ("👻 Клиент пропал", "CLIENT_GHOSTED"),
+        ("🪦 Закрыть lost", "CLOSED_LOST"),
+    ],
+    "PREPAYMENT_RECEIVED": [
+        ("🧭 План исполнения", "EXECUTION_PLANNING"),
+        ("📤 Делегировать", "DELEGATED"),
+        ("❌ Отказаться", "REJECTED"),
+    ],
+    "EXECUTION_PLANNING": [
+        ("⚙️ В работу", "IN_PROGRESS"),
+        ("📤 Делегировать", "DELEGATED"),
+    ],
+    "IN_PROGRESS": [
+        ("📦 Сдано", "DELIVERED"),
+        ("📤 Делегировать", "DELEGATED"),
+    ],
+    "DELIVERED": [
+        ("🧾 Ждём доплату", "FINAL_PAYMENT_WAITING"),
+        ("🏁 Закрыть успешно", "CLOSED_WON"),
+    ],
+    "FINAL_PAYMENT_WAITING": [
+        ("🏁 Закрыть успешно", "CLOSED_WON"),
+        ("🪦 Закрыть lost", "CLOSED_LOST"),
+    ],
+    "DELEGATED": [
+        ("⚙️ В работе", "IN_PROGRESS"),
+        ("📦 Сдано", "DELIVERED"),
+        ("🏁 Закрыть успешно", "CLOSED_WON"),
+        ("🪦 Закрыть lost", "CLOSED_LOST"),
+    ],
+    "CLIENT_GHOSTED": [
+        ("⏳ Вернуть в ожидание", "WAITING_REPLY"),
+        ("🪦 Закрыть lost", "CLOSED_LOST"),
+    ],
+}
+
+
+def deal_keyboard(deal: dict):
+    stage = deal.get("stage")
+    if is_terminal_stage(stage):
+        return None
+
+    rows = []
+    for label, next_stage in DEAL_ACTIONS.get(stage, []):
+        rows.append([{"text": label, "callback_data": f"deal:{next_stage}:{deal['deal_id']}"}])
+
+    rows.append([{"text": "🔄 Обновить карточку", "callback_data": f"deal:refresh:{deal['deal_id']}"}])
+    return {"inline_keyboard": rows}
+
+
+def send_deal_card(chat_id, deal: dict, message_id=None):
+    text = format_deal_card(deal)
+    keyboard = deal_keyboard(deal)
+    if message_id:
+        bot.edit_message_text(
+            text,
+            chat_id,
+            message_id,
+            parse_mode="Markdown",
+            reply_markup=keyboard,
+            disable_web_page_preview=True,
+        )
+    else:
+        bot.send_message(
+            chat_id,
+            text,
+            parse_mode="Markdown",
+            reply_markup=keyboard,
+            disable_web_page_preview=True,
+        )
 
 
 # ── Проверка: нужно ли отвечать ──────────────────────────────────────────────
@@ -277,6 +384,8 @@ def cmd_start(msg):
         "/status — баланс и дефицит\n"
         "/branches — ветки\n"
         "/today — дневной фокус\n"
+        "/deals — активные сделки\n"
+        "/deal ID — карточка сделки\n"
         "/reset — сбросить историю",
         parse_mode="Markdown")
 
@@ -317,6 +426,40 @@ def cmd_today(msg):
     if len(content) > 4000:
         content = content[:4000] + "\n_...обрезано_"
     bot.send_message(msg.chat.id, f"```\n{content}\n```", parse_mode="Markdown")
+
+
+@bot.message_handler(commands=["deals"])
+def cmd_deals(msg):
+    deals = [d for d in list_deals() if not is_terminal_stage(d.get("stage"))]
+    if not deals:
+        bot.send_message(msg.chat.id, "Активных сделок нет.")
+        return
+
+    lines = ["📋 *Активные сделки*"]
+    for deal in deals[:10]:
+        contact = deal.get("contact", {})
+        name = contact.get("name") or contact.get("username") or "клиент"
+        lines.append(
+            f"`{deal['deal_id']}` — {stage_label(deal.get('stage'))} — {name}"
+        )
+    lines.append("\nОткрыть карточку: `/deal ID`")
+    bot.send_message(msg.chat.id, "\n".join(lines), parse_mode="Markdown")
+
+
+@bot.message_handler(commands=["deal"])
+def cmd_deal(msg):
+    parts = (msg.text or "").split(maxsplit=1)
+    if len(parts) < 2:
+        bot.send_message(msg.chat.id, "Напиши так: `/deal ID`", parse_mode="Markdown")
+        return
+
+    deal_id = parts[1].strip()
+    deal = get_deal(deal_id)
+    if not deal:
+        bot.send_message(msg.chat.id, f"❌ Сделка `{deal_id}` не найдена.", parse_mode="Markdown")
+        return
+
+    send_deal_card(msg.chat.id, deal)
 
 
 @bot.message_handler(content_types=["voice"])
@@ -364,6 +507,33 @@ def handle_callback(call):
         action, offer_id = data.split(":", 1)
     except:
         bot.answer_callback_query(call.id, "❌ Ошибка")
+        return
+
+    if action == "deal":
+        try:
+            next_stage, deal_id = offer_id.split(":", 1)
+        except ValueError:
+            bot.answer_callback_query(call.id, "❌ Ошибка карточки")
+            return
+
+        deal = get_deal(deal_id)
+        if not deal:
+            bot.answer_callback_query(call.id, "❌ Сделка не найдена")
+            return
+
+        if next_stage != "refresh":
+            try:
+                update_stage(deal, next_stage)
+                bot.answer_callback_query(call.id, f"✅ {stage_label(next_stage)}")
+            except ValueError as e:
+                bot.answer_callback_query(call.id, "⛔ Нельзя перейти в эту стадию")
+                bot.send_message(chat_id, f"⛔ Переход отклонён: `{e}`", parse_mode="Markdown")
+                return
+        else:
+            bot.answer_callback_query(call.id, "🔄 Обновлено")
+
+        fresh_deal = get_deal(deal_id) or deal
+        send_deal_card(chat_id, fresh_deal, message_id=msg_id)
         return
 
     offer = get_offer(offer_id)
@@ -419,6 +589,7 @@ def handle_callback(call):
             parse_mode="Markdown",
             reply_markup=keyboard
         )
+        send_deal_card(chat_id, deal)
 
     elif action == "send_draft":
         parts = offer_id.split(":", 1)
@@ -467,6 +638,9 @@ asyncio.run(send())
                 bot.send_message(chat_id,
                     f"✅ *Отклик отправлен!*\nСделка `{deal_id}` → стадия: ⏳ ждём ответ клиента.\n\nСледующий шаг: контролировать входящий ответ.",
                     parse_mode="Markdown")
+                fresh_deal = get_deal(deal_id)
+                if fresh_deal:
+                    send_deal_card(chat_id, fresh_deal)
             else:
                 bot.send_message(chat_id, f"❌ Ошибка отправки: {result.stderr[:200]}")
         except Exception as e:
