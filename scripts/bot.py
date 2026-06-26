@@ -993,6 +993,8 @@ def handle_callback(call):
         bot.answer_callback_query(call.id, "⏳ Генерирую черновик...")
         deal = create_deal(offer)
         update_offer(offer_id, status="RESPONDED", deal_id=deal["deal_id"])
+        # Правильная цепочка: NEW_LEAD → RESPOND_DECIDED → FIRST_MESSAGE_DRAFTED
+        update_stage(deal, "RESPOND_DECIDED")
         update_stage(deal, "FIRST_MESSAGE_DRAFTED")
 
         draft = draft_first_message(deal)
@@ -1030,27 +1032,45 @@ def handle_callback(call):
 
         bot.answer_callback_query(call.id, "📨 Отправляю...")
 
-        # Отправляем через Telethon (через скрипт)
         try:
-            import subprocess
+            session_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "parser_session")
+            # Экранируем черновик для безопасной передачи
+            import json as _json
+            draft_safe = _json.dumps(draft)
+
+            if username and username != "None":
+                target_code = f'"{username}"'
+            elif deal["contact"].get("user_id"):
+                target_code = str(int(deal["contact"]["user_id"]))
+            else:
+                bot.send_message(chat_id, "❌ Нет контакта для отправки — нет username и user_id")
+                return
+
             script = f"""
-import asyncio
+import asyncio, os
 from telethon import TelegramClient
-import os
+import json
+
 async def send():
-    client = TelegramClient('scripts/parser_session',
+    client = TelegramClient(
+        {_json.dumps(session_path)},
         int(os.getenv('TELEGRAM_API_ID')),
-        os.getenv('TELEGRAM_API_HASH'))
+        os.getenv('TELEGRAM_API_HASH')
+    )
     await client.start()
-    target = '{username}' if '{username}' != 'None' else int({deal['contact'].get('user_id', 0)})
-    await client.send_message(target, '''{draft}''')
+    text = json.loads({_json.dumps(draft_safe)})
+    await client.send_message({target_code}, text)
+    print("OK")
     await client.disconnect()
+
 asyncio.run(send())
 """
             result = subprocess.run(
                 ["python3", "-c", script],
-                capture_output=True, text=True, timeout=20,
-                env={**os.environ, "TELEGRAM_API_ID": os.getenv("TELEGRAM_API_ID", ""),
+                capture_output=True, text=True, timeout=25,
+                cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                env={**os.environ,
+                     "TELEGRAM_API_ID":   os.getenv("TELEGRAM_API_ID", ""),
                      "TELEGRAM_API_HASH": os.getenv("TELEGRAM_API_HASH", "")}
             )
             if result.returncode == 0:

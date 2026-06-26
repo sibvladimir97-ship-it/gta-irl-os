@@ -1,0 +1,43 @@
+{
+  "offer_id": "a6ef7a62",
+  "created_at": "2026-06-26T14:14:57.579549",
+  "status": "NEW",
+  "raw": {
+    "sender_id": 1898069990,
+    "sender_username": null,
+    "chat_username": "mari_vakansii",
+    "msg_id": 5783194,
+    "msg_url": "https://t.me/mari_vakansii/5783194",
+    "contact_url": "tg://user?id=1898069990"
+  },
+  "raw_text": "**Ищу помощника **для ведения \nЮтуба моих клиентов \n\nОт плата от 15.000₽ за проект\nпишете в лс с откликом «ютуб»\nВышлю подробности \n\n#ищу #вакансия #ютую #смм",
+  "display": {
+    "chat_name": "Мари про вакансии — инфобизнес",
+    "sender_name": "Анастасия",
+    "date": "26.06 12:23",
+    "keywords": [
+      "ютуб",
+      "#ищу"
+    ],
+    "ai_score": null,
+    "score": {
+      "verdict": "уточнить",
+      "reason": "нужно понять, есть ли техническая задача",
+      "risk": "normal",
+      "risk_markers": [],
+      "budget": "000 ₽",
+      "money_score": 1,
+      "complexity": "легко",
+      "skills": [
+        "video"
+      ],
+      "keywords": [
+        "ютуб",
+        "#ищу"
+      ],
+      "urgent": false
+    },
+    "preview": "**Ищу помощника **для ведения \nЮтуба моих клиентов \n\nОт плата от 15.000₽ за проект\nпишете в лс с откликом «ютуб»\nВышлю подробности \n\n#ищу #вакансия #ютую #смм"
+  },
+  "deal_id": null
+}

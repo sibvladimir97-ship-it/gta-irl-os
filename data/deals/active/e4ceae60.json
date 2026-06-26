@@ -1,0 +1,63 @@
+{
+  "deal_id": "e4ceae60",
+  "offer_id": "6d6702a6",
+  "created_at": "2026-06-26T14:20:50.344254",
+  "stage": "NEW_LEAD",
+  "contact": {
+    "name": "Жанна",
+    "username": "Andre_eva",
+    "user_id": 777069630,
+    "contact_url": "https://t.me/Andre_eva"
+  },
+  "source": {
+    "chat": "Мари про вакансии — инфобизнес",
+    "msg_url": "https://t.me/mari_vakansii/5782840"
+  },
+  "offer_text": "#ищу #дизайнер\n\n**Дизайнер макетов для объявлений на Авито**\n\nИщу дизайнера, который сможет **быстро взять задачу в работу **и сделать макеты для объявлений по ТЗ!\n(объявлений сейчас по совокупности будет 5-6, минимум 5 макетов на объявление) \n\nВажно:\n— умеете делать понятный и цепляющий дизайн\n— понимаете специфику макетов для Авито\n— работаете быстро и внимательно\n— умеете грамотно расставлять акценты в тексте и визуале\n— готовы оперативно вносить небольшие правки при необходимости\n\n**Задачи:**\n— разработка макетов для 5-6 объявлений на Авито\n— оформление в едином стиле\n— подготовка макетов в нужном формате для публикации\n\n**Условия:**\n— Удалённо\n— Срочная задача\n— Оплата по факту выполнения работы\n\n📌 Приоритет специалистам, которые готовы приступить сразу после согласования.\n\nДля отклика присылайте:\n— небольшое сообщение о себе\n— портфолио или примеры похожих работ\n— когда можете начать\n— примерную стоимость \n\nОтклик в личку @Andre_eva",
+  "messages": [],
+  "notes": [],
+  "brief": {},
+  "proposal": null,
+  "payments": [],
+  "payment": {
+    "prepayment_status": "pending",
+    "prepayment_amount": null,
+    "prepayment_received_at": null,
+    "final_payment_status": "pending",
+    "final_payment_amount": null,
+    "final_payment_received_at": null
+  },
+  "execution": {
+    "mode": null,
+    "status": "not_started",
+    "planned_at": null,
+    "started_at": null,
+    "delivered_at": null
+  },
+  "followup": null,
+  "followups": [],
+  "events": [
+    {
+      "type": "deal_created",
+      "title": "Сделка создана",
+      "data": {
+        "offer_id": "6d6702a6",
+        "stage": "NEW_LEAD"
+      },
+      "timestamp": "2026-06-26T14:20:50.344294"
+    }
+  ],
+  "loss": null,
+  "budget": null,
+  "deadline": null,
+  "result": null,
+  "stage_history": [
+    {
+      "from": null,
+      "to": "NEW_LEAD",
+      "at": "2026-06-26T14:20:50.344254",
+      "reason": "created"
+    }
+  ],
+  "next_action": "Проверить заявку: деньги, риск, релевантность."
+}

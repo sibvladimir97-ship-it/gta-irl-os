@@ -1,0 +1,39 @@
+{
+  "offer_id": "c18b2358",
+  "created_at": "2026-06-26T14:16:43.740351",
+  "status": "NEW",
+  "raw": {
+    "sender_id": 1154890440,
+    "sender_username": "shepevaster",
+    "chat_username": "mari_vakansii",
+    "msg_id": 5782991,
+    "msg_url": "https://t.me/mari_vakansii/5782991",
+    "contact_url": "https://t.me/shepevaster"
+  },
+  "raw_text": "#ищу #cмм #сценарист\n\nИщем смм-сценариста в штат для бренда косметики\n\nОтклик: @shepevaster",
+  "display": {
+    "chat_name": "Мари про вакансии — инфобизнес",
+    "sender_name": "yana",
+    "date": "26.06 11:58",
+    "keywords": [
+      "#ищу"
+    ],
+    "ai_score": null,
+    "score": {
+      "verdict": "уточнить",
+      "reason": "нужно понять, есть ли техническая задача",
+      "risk": "normal",
+      "risk_markers": [],
+      "budget": "уточнить",
+      "money_score": 1,
+      "complexity": "легко",
+      "skills": [],
+      "keywords": [
+        "#ищу"
+      ],
+      "urgent": false
+    },
+    "preview": "#ищу #cмм #сценарист\n\nИщем смм-сценариста в штат для бренда косметики\n\nОтклик: @shepevaster"
+  },
+  "deal_id": null
+}
