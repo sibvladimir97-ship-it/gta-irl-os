@@ -6,8 +6,10 @@ Groq AI (llama-3.3-70b) + Whisper (голосовые) + файлы OS
 """
 
 import os
+import json
 import re
 import requests
+import subprocess
 import telebot
 from datetime import date, datetime
 
@@ -17,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from offer_store import get_offer, update_offer
 from negotiator import (
     create_deal, draft_first_message, update_stage, add_message,
-    format_deal_card, get_deal, save_deal, list_deals,
+    format_deal_card, get_deal, save_deal, list_deals, prepare_proposal,
 )
 from deal_pipeline import is_terminal_stage, stage_label
 
@@ -54,12 +56,13 @@ DEAL_ACTIONS = {
         ("❌ Отказаться", "REJECTED"),
     ],
     "BRIEF_READY": [
-        ("📋 Подготовить КП", "PROPOSAL_DRAFTED"),
+        ("📋 Подготовить КП", "prepare_proposal"),
         ("📤 Делегировать", "DELEGATED"),
         ("❌ Отказаться", "REJECTED"),
     ],
     "PROPOSAL_DRAFTED": [
-        ("📤 КП отправлено", "PROPOSAL_SENT"),
+        ("📨 Отправить КП", "send_proposal"),
+        ("📤 КП отправлено вручную", "PROPOSAL_SENT"),
         ("❌ Отказаться", "REJECTED"),
     ],
     "PROPOSAL_SENT": [
@@ -139,6 +142,46 @@ def send_deal_card(chat_id, deal: dict, message_id=None):
             reply_markup=keyboard,
             disable_web_page_preview=True,
         )
+
+
+def send_client_message(deal: dict, text: str):
+    """Send a confirmed outgoing message to the deal contact via Telethon."""
+    username = deal.get("contact", {}).get("username")
+    user_id = deal.get("contact", {}).get("user_id")
+    target = username if username else int(user_id or 0)
+
+    script = """
+import asyncio
+import json
+import os
+import sys
+from telethon import TelegramClient
+
+async def send():
+    target = json.loads(sys.argv[1])
+    text = sys.argv[2]
+    client = TelegramClient(
+        'scripts/parser_session',
+        int(os.getenv('TELEGRAM_API_ID')),
+        os.getenv('TELEGRAM_API_HASH'),
+    )
+    await client.start()
+    await client.send_message(target, text)
+    await client.disconnect()
+
+asyncio.run(send())
+"""
+    return subprocess.run(
+        ["python3", "-c", script, json.dumps(target), text],
+        capture_output=True,
+        text=True,
+        timeout=20,
+        env={
+            **os.environ,
+            "TELEGRAM_API_ID": os.getenv("TELEGRAM_API_ID", ""),
+            "TELEGRAM_API_HASH": os.getenv("TELEGRAM_API_HASH", ""),
+        },
+    )
 
 
 # ── Проверка: нужно ли отвечать ──────────────────────────────────────────────
@@ -521,7 +564,53 @@ def handle_callback(call):
             bot.answer_callback_query(call.id, "❌ Сделка не найдена")
             return
 
-        if next_stage != "refresh":
+        if next_stage == "prepare_proposal":
+            try:
+                deal = prepare_proposal(deal)
+                bot.answer_callback_query(call.id, "📋 КП подготовлено")
+                proposal_text = (deal.get("proposal") or {}).get("text") or deal.get("draft", "")
+                if proposal_text:
+                    bot.send_message(
+                        chat_id,
+                        f"📋 Черновик КП для сделки {deal_id}:\n\n{proposal_text}\n\nОтправить клиенту?",
+                        reply_markup={
+                            "inline_keyboard": [[
+                                {"text": "📨 Отправить КП", "callback_data": f"deal:send_proposal:{deal_id}"},
+                            ]]
+                        },
+                        disable_web_page_preview=True,
+                    )
+            except Exception as e:
+                bot.answer_callback_query(call.id, "❌ Не смог подготовить КП")
+                bot.send_message(chat_id, f"❌ Не смог подготовить КП: {e}")
+                return
+
+        elif next_stage == "send_proposal":
+            proposal = deal.get("proposal") or {}
+            proposal_text = proposal.get("text") or deal.get("draft")
+            if not proposal_text:
+                bot.answer_callback_query(call.id, "❌ КП не найдено")
+                bot.send_message(chat_id, "❌ В сделке нет черновика КП. Сначала нажми «Подготовить КП».")
+                return
+
+            bot.answer_callback_query(call.id, "📨 Отправляю КП...")
+            result = send_client_message(deal, proposal_text)
+            if result.returncode == 0:
+                proposal["status"] = "sent"
+                proposal["sent_at"] = datetime.utcnow().isoformat()
+                deal["proposal"] = proposal
+                update_stage(deal, "PROPOSAL_SENT")
+                add_message(deal, "outgoing", proposal_text)
+                bot.send_message(
+                    chat_id,
+                    f"✅ КП отправлено клиенту.\nСделка `{deal_id}` → стадия: {stage_label('PROPOSAL_SENT')}",
+                    parse_mode="Markdown",
+                )
+            else:
+                bot.send_message(chat_id, f"❌ Ошибка отправки КП: {result.stderr[:200]}")
+                return
+
+        elif next_stage != "refresh":
             try:
                 update_stage(deal, next_stage)
                 bot.answer_callback_query(call.id, f"✅ {stage_label(next_stage)}")

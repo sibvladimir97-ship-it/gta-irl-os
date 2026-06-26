@@ -44,6 +44,8 @@ def create_deal(offer: dict) -> dict:
         "offer_text": offer["raw_text"],
         "messages":   [],   # история сообщений
         "notes":      [],   # заметки
+        "brief":      {},
+        "proposal":   None,
         "budget":     None,
         "deadline":   None,
         "result":     None,
@@ -134,6 +136,15 @@ def draft_first_message(deal: dict) -> str:
 
 def draft_offer(deal: dict, budget: str, deadline: str, scope: str) -> str:
     """Генерирует КП. Не отправляет."""
+    if not GROQ_KEY:
+        return (
+            f"Готов взяться за задачу.\n"
+            f"Что сделаю: {scope[:300]}\n"
+            f"Стоимость: {budget}\n"
+            f"Срок выполнения: {deadline}\n"
+            f"Работаю по предоплате 50%. Готов начать после подтверждения."
+        )
+
     try:
         r = requests.post(GROQ_URL,
             headers={"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"},
@@ -149,6 +160,46 @@ def draft_offer(deal: dict, budget: str, deadline: str, scope: str) -> str:
         return r.json()["choices"][0]["message"]["content"]
     except:
         return f"Стоимость работы: {budget}\nСрок выполнения: {deadline}\nРаботаю по предоплате 50%."
+
+
+def proposal_scope(deal: dict) -> str:
+    """Return the best available scope for proposal drafting."""
+    brief = deal.get("brief") or {}
+    if brief.get("scope"):
+        return brief["scope"]
+    if deal.get("tz"):
+        return deal["tz"]
+
+    incoming = [
+        m.get("text", "")
+        for m in deal.get("messages", [])
+        if m.get("direction") == "incoming" and m.get("text")
+    ]
+    if incoming:
+        return incoming[-1][:800]
+
+    return deal.get("offer_text", "")[:800]
+
+
+def prepare_proposal(deal: dict) -> dict:
+    """Generate and save a commercial proposal draft. Does not send it."""
+    budget = deal.get("budget") or "уточнить"
+    deadline = deal.get("deadline") or "обсудим"
+    scope = proposal_scope(deal)
+    text = draft_offer(deal, budget, deadline, scope)
+
+    deal["proposal"] = {
+        "text": text,
+        "budget": budget,
+        "deadline": deadline,
+        "scope": scope,
+        "status": "draft",
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    deal["draft"] = text
+    move_deal(deal, "PROPOSAL_DRAFTED", reason="proposal_prepared")
+    save_deal(deal)
+    return deal
 
 
 # ── Форматирование карточки сделки ────────────────────────────────────────────
@@ -175,6 +226,12 @@ def format_deal_card(deal: dict) -> str:
         lines.append(f"💰 Бюджет: {deal['budget']}")
     if deal.get("deadline"):
         lines.append(f"⏰ Дедлайн: {deal['deadline']}")
+    if deal.get("proposal"):
+        proposal = deal["proposal"]
+        lines.append(f"📋 КП: {proposal.get('status', 'draft')}")
+        preview = (proposal.get("text") or "").replace("\n", " ")[:160]
+        if preview:
+            lines.append(f"_{preview}..._")
     if deal["messages"]:
         last = deal["messages"][-1]
         arrow = "→" if last["direction"] == "outgoing" else "←"
