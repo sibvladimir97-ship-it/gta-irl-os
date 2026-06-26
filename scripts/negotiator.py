@@ -50,6 +50,7 @@ def ensure_deal_fields(deal: dict) -> dict:
     deal.setdefault("followup", None)
     deal.setdefault("followups", [])
     deal.setdefault("events", [])
+    deal.setdefault("loss", None)
     return deal
 
 
@@ -109,6 +110,7 @@ def create_deal(offer: dict) -> dict:
         "followup":   None,
         "followups":  [],
         "events":     [],
+        "loss":       None,
         "budget":     None,
         "deadline":   None,
         "result":     None,
@@ -236,6 +238,58 @@ def money_summary(deals=None):
             totals["waiting_final"] += 1
     totals["received_total"] = totals["prepayment_received"] + totals["final_received"]
     return totals
+
+
+LOSS_REASONS = {
+    "client_ghosted": "клиент пропал",
+    "not_fit": "не подходит по профилю",
+    "no_budget": "нет бюджета",
+    "too_risky": "слишком рискованно",
+    "scam": "скам",
+    "delegated": "делегировано",
+    "manual": "закрыто вручную",
+}
+
+
+def close_deal(deal: dict, stage: str, reason_code="manual", note=None) -> dict:
+    """Close or reject a deal with structured reason for analytics."""
+    ensure_deal_fields(deal)
+    reason = LOSS_REASONS.get(reason_code, reason_code)
+    now = datetime.utcnow().isoformat()
+    deal["loss"] = {
+        "stage": stage,
+        "reason_code": reason_code,
+        "reason": reason,
+        "note": note,
+        "closed_at": now,
+    }
+    deal["result"] = "won" if stage == "CLOSED_WON" else "lost"
+    move_deal(deal, stage, reason=f"closed:{reason_code}", allow_any=True)
+    add_event(deal, "deal_closed", f"Сделка закрыта: {stage_label(stage)}", {
+        "stage": stage,
+        "reason_code": reason_code,
+        "reason": reason,
+        "note": note,
+    })
+    save_deal(deal)
+    return deal
+
+
+def loss_summary(deals=None):
+    """Return analytics for lost/rejected/scam deals by reason."""
+    deals = deals if deals is not None else list_deals()
+    summary = {"total_lost": 0, "by_reason": {}, "by_stage": {}}
+    for deal in deals:
+        ensure_deal_fields(deal)
+        if deal.get("stage") not in ["CLOSED_LOST", "REJECTED", "SCAM", "HIDDEN"]:
+            continue
+        summary["total_lost"] += 1
+        loss = deal.get("loss") or {}
+        reason = loss.get("reason") or "причина не указана"
+        stage = deal.get("stage")
+        summary["by_reason"][reason] = summary["by_reason"].get(reason, 0) + 1
+        summary["by_stage"][stage] = summary["by_stage"].get(stage, 0) + 1
+    return summary
 
 
 def needs_followup(deal: dict) -> bool:
@@ -623,6 +677,9 @@ def format_deal_card(deal: dict) -> str:
     execution = deal.get("execution") or {}
     if execution.get("status") and execution.get("status") != "not_started":
         lines.append(f"⚙️ Исполнение: {execution.get('status')}")
+    if deal.get("loss"):
+        loss = deal["loss"]
+        lines.append(f"🪦 Закрытие: {loss.get('reason')}")
     if deal["messages"]:
         last = deal["messages"][-1]
         arrow = "→" if last["direction"] == "outgoing" else "←"

@@ -23,7 +23,7 @@ from negotiator import (
     record_prepayment, plan_execution, start_execution, mark_delivered,
     record_final_payment, pipeline_summary, money_summary,
     prepare_followup, mark_followup_sent, list_followup_candidates,
-    format_deal_timeline,
+    format_deal_timeline, close_deal, loss_summary,
 )
 from deal_pipeline import is_terminal_stage, stage_label
 
@@ -48,7 +48,7 @@ DEAL_ACTIONS = {
     "WAITING_REPLY": [
         ("✍️ Follow-up", "prepare_followup"),
         ("👻 Клиент пропал", "CLIENT_GHOSTED"),
-        ("🪦 Закрыть lost", "CLOSED_LOST"),
+        ("🪦 Lost: клиент пропал", "close_lost_client_ghosted"),
     ],
     "CLIENT_REPLIED": [
         ("🔍 Собирать ТЗ", "BRIEF_COLLECTING"),
@@ -59,17 +59,17 @@ DEAL_ACTIONS = {
         ("✍️ Follow-up", "prepare_followup"),
         ("✅ ТЗ собрано", "BRIEF_READY"),
         ("👻 Клиент пропал", "CLIENT_GHOSTED"),
-        ("❌ Отказаться", "REJECTED"),
+        ("❌ Не подходит", "close_rejected_not_fit"),
     ],
     "BRIEF_READY": [
         ("📋 Подготовить КП", "prepare_proposal"),
         ("📤 Делегировать", "DELEGATED"),
-        ("❌ Отказаться", "REJECTED"),
+        ("❌ Нет бюджета/не подходит", "close_rejected_no_budget"),
     ],
     "PROPOSAL_DRAFTED": [
         ("📨 Отправить КП", "send_proposal"),
         ("📤 КП отправлено вручную", "PROPOSAL_SENT"),
-        ("❌ Отказаться", "REJECTED"),
+        ("❌ Отказаться", "close_rejected_manual"),
     ],
     "PROPOSAL_SENT": [
         ("💳 Ждём предоплату", "PREPAYMENT_WAITING"),
@@ -80,12 +80,12 @@ DEAL_ACTIONS = {
         ("✍️ Follow-up", "prepare_followup"),
         ("💰 Предоплата получена", "record_prepayment"),
         ("👻 Клиент пропал", "CLIENT_GHOSTED"),
-        ("🪦 Закрыть lost", "CLOSED_LOST"),
+        ("🪦 Lost: клиент пропал", "close_lost_client_ghosted"),
     ],
     "PREPAYMENT_RECEIVED": [
         ("🧭 План исполнения", "plan_execution"),
         ("📤 Делегировать", "DELEGATED"),
-        ("❌ Отказаться", "REJECTED"),
+        ("❌ Отказаться", "close_rejected_manual"),
     ],
     "EXECUTION_PLANNING": [
         ("⚙️ В работу", "start_execution"),
@@ -102,18 +102,18 @@ DEAL_ACTIONS = {
     "FINAL_PAYMENT_WAITING": [
         ("✍️ Follow-up", "prepare_followup"),
         ("💰 Доплата получена", "record_final_payment"),
-        ("🪦 Закрыть lost", "CLOSED_LOST"),
+        ("🪦 Lost: не оплатил", "close_lost_no_budget"),
     ],
     "DELEGATED": [
         ("⚙️ В работе", "IN_PROGRESS"),
         ("📦 Сдано", "DELIVERED"),
         ("🏁 Закрыть успешно", "CLOSED_WON"),
-        ("🪦 Закрыть lost", "CLOSED_LOST"),
+        ("🪦 Lost: делегирование", "close_lost_delegated"),
     ],
     "CLIENT_GHOSTED": [
         ("✍️ Follow-up", "prepare_followup"),
         ("⏳ Вернуть в ожидание", "WAITING_REPLY"),
-        ("🪦 Закрыть lost", "CLOSED_LOST"),
+        ("🪦 Lost: клиент пропал", "close_lost_client_ghosted"),
     ],
 }
 
@@ -445,6 +445,7 @@ def cmd_start(msg):
         "/pipeline — дашборд воронки\n"
         "/money — деньги по сделкам\n"
         "/followups — кого пора пнуть\n"
+        "/losses — причины потерь\n"
         "/reset — сбросить историю",
         parse_mode="Markdown")
 
@@ -620,6 +621,28 @@ def cmd_followups(msg):
     bot.send_message(msg.chat.id, "\n".join(lines), parse_mode="Markdown")
 
 
+@bot.message_handler(commands=["losses"])
+def cmd_losses(msg):
+    summary = loss_summary()
+    if summary["total_lost"] == 0:
+        bot.send_message(msg.chat.id, "Потерь пока нет.")
+        return
+
+    lines = [
+        "🪦 *GTA IRL OS — Потери / отказы*",
+        f"Всего: `{summary['total_lost']}`",
+        "",
+        "*По причинам:*",
+    ]
+    for reason, count in sorted(summary["by_reason"].items(), key=lambda item: item[1], reverse=True):
+        lines.append(f"• {reason}: `{count}`")
+    if summary["by_stage"]:
+        lines.append("\n*По стадиям:*")
+        for stage, count in sorted(summary["by_stage"].items()):
+            lines.append(f"• {stage_label(stage)}: `{count}`")
+    bot.send_message(msg.chat.id, "\n".join(lines), parse_mode="Markdown")
+
+
 @bot.message_handler(content_types=["voice"])
 def handle_voice(msg):
     if not should_respond_voice(msg):
@@ -684,7 +707,27 @@ def handle_callback(call):
             bot.send_message(chat_id, format_deal_timeline(deal), parse_mode="Markdown")
             return
 
-        if next_stage == "prepare_proposal":
+        if next_stage.startswith("close_lost_"):
+            reason_code = next_stage.replace("close_lost_", "", 1)
+            deal = close_deal(deal, "CLOSED_LOST", reason_code=reason_code)
+            bot.answer_callback_query(call.id, "🪦 Сделка закрыта lost")
+            bot.send_message(
+                chat_id,
+                f"🪦 Сделка `{deal_id}` закрыта как lost.\nПричина: {deal['loss']['reason']}",
+                parse_mode="Markdown",
+            )
+
+        elif next_stage.startswith("close_rejected_"):
+            reason_code = next_stage.replace("close_rejected_", "", 1)
+            deal = close_deal(deal, "REJECTED", reason_code=reason_code)
+            bot.answer_callback_query(call.id, "❌ Сделка отклонена")
+            bot.send_message(
+                chat_id,
+                f"❌ Сделка `{deal_id}` отклонена.\nПричина: {deal['loss']['reason']}",
+                parse_mode="Markdown",
+            )
+
+        elif next_stage == "prepare_proposal":
             try:
                 deal = prepare_proposal(deal)
                 bot.answer_callback_query(call.id, "📋 КП подготовлено")
