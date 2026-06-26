@@ -128,12 +128,23 @@ def ai_evaluate(text, chat_name):
         return None
 
 
-def format_offer(text, chat_name, link, date_str, sender_id=None, is_history=False):
+def format_offer(text, chat_name, msg_link, sender_link, sender_name, date_str, is_history=False):
     icon = "📚 *История*" if is_history else "🎯 *Новый оффер*"
     _, keywords = is_client_offer(text)
     preview = text[:350] + ("..." if len(text) > 350 else "")
     kw_str = ", ".join(keywords[:3])
-    result = f"{icon} | {date_str}\n📍 {chat_name}\n🔑 {kw_str}\n\n{preview}\n\n🔗 {link}"
+
+    result = f"{icon} | {date_str}\n📍 {chat_name}\n🔑 {kw_str}\n\n{preview}"
+
+    # Ссылки
+    links = []
+    if msg_link:
+        links.append(f"[Сообщение]({msg_link})")
+    if sender_link:
+        links.append(f"[Написать {sender_name}]({sender_link})")
+    if links:
+        result += "\n\n" + " | ".join(links)
+
     evaluation = ai_evaluate(text, chat_name)
     if evaluation:
         result += f"\n\n{evaluation}"
@@ -141,6 +152,22 @@ def format_offer(text, chat_name, link, date_str, sender_id=None, is_history=Fal
 
 
 # ── Сканирование истории ──────────────────────────────────────────────────────
+
+async def get_sender_link(msg, client):
+    """Возвращает ссылку на автора сообщения."""
+    try:
+        sender = await msg.get_sender()
+        username = getattr(sender, 'username', None)
+        sender_id = getattr(sender, 'id', None)
+        first_name = getattr(sender, 'first_name', '') or ''
+        if username:
+            return f"@{username}", f"https://t.me/{username}", first_name
+        elif sender_id:
+            return first_name or "Автор", f"tg://user?id={sender_id}", first_name
+    except:
+        pass
+    return "Автор", None, ""
+
 
 async def scan_history(client, entity, chat_name, chat_username, hours=24):
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
@@ -157,9 +184,10 @@ async def scan_history(client, entity, chat_name, chat_username, hours=24):
         sender_id = msg.sender_id
         if is_duplicate(text, sender_id):
             continue
-        link = f"https://t.me/{chat_username}/{msg.id}" if chat_username else "нет ссылки"
+        msg_link = f"https://t.me/{chat_username}/{msg.id}" if chat_username else None
+        sender_name, sender_link, first_name = await get_sender_link(msg, client)
         date_str = msg.date.strftime("%d.%m %H:%M")
-        send_to_bot(format_offer(text, chat_name, link, date_str, sender_id, is_history=True))
+        send_to_bot(format_offer(text, chat_name, msg_link, sender_link, sender_name, date_str, is_history=True))
         count += 1
         await asyncio.sleep(0.5)
     return count
@@ -263,11 +291,12 @@ async def main():
             chat = await event.get_chat()
             title = getattr(chat, "title", None) or getattr(chat, "username", "?")
             uname = getattr(chat, "username", None)
-            link = f"https://t.me/{uname}/{event.message.id}" if uname else "нет ссылки"
+            msg_link = f"https://t.me/{uname}/{event.message.id}" if uname else None
         except:
-            title, link = "Чат", "нет ссылки"
+            title, msg_link = "Чат", None
+        sender_name, sender_link, _ = await get_sender_link(event.message, client)
         date_str = datetime.now().strftime("%H:%M")
-        send_to_bot(format_offer(text, title, link, date_str, sender_id, is_history=False))
+        send_to_bot(format_offer(text, title, msg_link, sender_link, sender_name, date_str, is_history=False))
 
     print("Слушаю новые сообщения. Напиши /стоп в боте для остановки.")
 
