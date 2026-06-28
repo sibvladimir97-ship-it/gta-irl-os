@@ -5,3 +5,4 @@
 !.env.example
 memory/inbox/*.md
 !memory/inbox/.gitkeep
+graphify-out/cache/
