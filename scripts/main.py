@@ -507,15 +507,71 @@ def cmd_start_parser(msg):
 @bot.message_handler(commands=["deals"])
 def cmd_deals(msg):
     deals = list_deals()
-    active = [d for d in deals if d.get("stage") not in ["CLOSED_WON", "CLOSED_LOST", "SCAM"]]
+    terminal = ["CLOSED_WON", "CLOSED_LOST", "SCAM", "CLIENT_GHOSTED"]
+    active = [d for d in deals if d.get("stage") not in terminal]
     if not active:
         bot.send_message(msg.chat.id, "Активных сделок нет.")
         return
-    lines = [f"*Активные сделки ({len(active)}):*"]
-    for d in active[:10]:
-        name = d.get("contact", {}).get("name", "?")
-        lines.append(f"• `{d['deal_id']}` — {name} — {d.get('stage','?')}")
-    bot.send_message(msg.chat.id, "\n".join(lines), parse_mode="Markdown")
+
+    stage_icons = {
+        "NEW_LEAD":             "🆕",
+        "RESPOND_DECIDED":      "✅",
+        "FIRST_MESSAGE_DRAFTED":"✏️",
+        "FIRST_MESSAGE_SENT":   "📨",
+        "WAITING_REPLY":        "⏳",
+        "CLIENT_REPLIED":       "💬",
+        "QUALIFYING":           "🔍",
+        "PROPOSAL_SENT":        "📋",
+        "PREPAYMENT_WAITING":   "💳",
+        "PREPAYMENT_RECEIVED":  "💰",
+        "IN_WORK":              "⚙️",
+    }
+
+    # Отправляем по одной карточке на каждую сделку
+    for d in active[:15]:
+        contact = d.get("contact", {})
+        name     = contact.get("name", "?")
+        username = contact.get("username")
+        user_id  = contact.get("user_id")
+        stage    = d.get("stage", "?")
+        icon     = stage_icons.get(stage, "•")
+        did      = d["deal_id"]
+        budget   = d.get("budget") or d.get("brief", {}).get("budget") or "—"
+        deadline = d.get("deadline") or d.get("brief", {}).get("deadline") or "—"
+
+        # Кликабельная ссылка
+        if username:
+            contact_link = f"[{name} @{username}](https://t.me/{username})"
+        elif user_id:
+            contact_link = f"[{name}](tg://user?id={user_id})"
+        else:
+            contact_link = name
+
+        # Последнее сообщение
+        msgs = d.get("messages", [])
+        last_msg = ""
+        if msgs:
+            last = msgs[-1]
+            arrow = "→" if last["direction"] == "outgoing" else "←"
+            last_msg = f"\n_{arrow} {last['text'][:80]}_"
+
+        text = (
+            f"{icon} *{contact_link}*\n"
+            f"`{did}` · 💰 {budget} · ⏰ {deadline}\n"
+            f"Стадия: {STAGE_LABELS.get(stage, stage)}"
+            f"{last_msg}"
+        )
+
+        kb = make_kb(
+            [("📨 Написать", f"open_chat:{did}"),
+             ("✅ Предоплата", f"prepay:{did}"),
+             ("👻 Пропал", f"ghost:{did}")],
+        )
+        bot.send_message(msg.chat.id, text,
+                        parse_mode="Markdown",
+                        disable_web_page_preview=True,
+                        reply_markup=kb)
+
 
 @bot.message_handler(commands=["collapse"])
 def cmd_collapse(msg):
@@ -801,6 +857,28 @@ def handle_callback(call):
                 bot.send_message(chat_id, "✅ Отправлено.", parse_mode="Markdown")
         else:
             bot.send_message(chat_id, f"❌ Ошибка: {err}")
+
+    elif action == "open_chat":
+        deal = get_deal(rest)
+        if not deal:
+            bot.answer_callback_query(call.id, "❌ Сделка не найдена")
+            return
+        contact  = deal.get("contact", {})
+        username = contact.get("username")
+        user_id  = contact.get("user_id")
+        name     = contact.get("name", "?")
+        if username:
+            link = f"https://t.me/{username}"
+        elif user_id:
+            link = f"tg://user?id={user_id}"
+        else:
+            bot.answer_callback_query(call.id, "❌ Нет контакта")
+            return
+        bot.answer_callback_query(call.id, "Открываю чат...")
+        bot.send_message(chat_id,
+            f"💬 Переписка с *{name}*\n{link}\n\n"
+            f"Сделка `{rest}` · {STAGE_LABELS.get(deal.get('stage',''), '')}",
+            parse_mode="Markdown", disable_web_page_preview=False)
 
     elif action == "prepay":
         deal = get_deal(rest)
