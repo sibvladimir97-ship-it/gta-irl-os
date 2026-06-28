@@ -25,41 +25,19 @@ import telebot
 from telethon import TelegramClient, events
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from config import (
+    ROOT, SESSION_FILE, STOP_FILE, LAST_MSG_IDS_FILE,
+    BOT_TOKEN, GROQ_KEY, TELEGRAM_API_ID, TELEGRAM_API_HASH,
+    GROQ_URL, GROQ_MODEL, BOT_USERNAME, MONITOR_CHATS,
+    OFFER_KEYWORDS, OFFER_EXCLUDE,
+    SEND_RATE_LIMIT_SECONDS, HISTORY_SCAN_LIMIT, HISTORY_SCAN_HOURS,
+    HISTORY_SCAN_DELAY_SECONDS, SEND_QUEUE_POLL_SECONDS,
+)
 from offer_store import create_offer, get_offer, update_offer
 from negotiator import (
     create_deal, get_deal, save_deal, update_stage, add_message,
     draft_first_message, list_deals, format_deal_card
 )
-
-# ── Config ────────────────────────────────────────────────────────────────────
-
-ROOT         = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SESSION_FILE = os.path.join(ROOT, "scripts", "parser_session")
-STOP_FILE    = os.path.join(ROOT, "scripts", ".parser_stop")
-ENV_FILE     = os.path.join(ROOT, ".env")
-
-BOT_TOKEN    = os.getenv("TELEGRAM_TOKEN", "")
-GROQ_KEY     = os.getenv("GROQ_API_KEY", "")
-API_ID       = int(os.getenv("TELEGRAM_API_ID", "0"))
-API_HASH     = os.getenv("TELEGRAM_API_HASH", "")
-GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions"
-BOT_USERNAME = "gta_irl_assistant_bot"
-
-MONITOR_CHATS = ["mari_vakansii", "freelansim_ru"]
-
-KEYWORDS = [
-    "ищу разработчика", "нужен разработчик", "нужен программист",
-    "автоматизация", "бот телеграм", "нужен бот", "telegram bot",
-    "парсер", "python", "ai агент", "ai agent", "чат-бот",
-    "ищу исполнителя", "нужен исполнитель", "срочно нужен",
-    "youtube", "ютуб", "монтаж", "#ищу", "готов заплатить",
-]
-
-EXCLUDE = [
-    "#помогу", "#предлагаю", "#услуги", "#выполню", "#портфолио",
-    "#резюме", "#ищуработу", "предлагаю свои услуги", "мои услуги",
-    "принимаю заказы", "страховой взнос", "залог",
-]
 
 # Глобальные переменные
 bot          = telebot.TeleBot(BOT_TOKEN)
@@ -78,9 +56,9 @@ log = logging.getLogger("gta")
 
 def is_offer(text):
     t = text.lower()
-    if any(e.lower() in t for e in EXCLUDE):
+    if any(e.lower() in t for e in OFFER_EXCLUDE):
         return False, []
-    matches = [k for k in KEYWORDS if k.lower() in t]
+    matches = [k for k in OFFER_KEYWORDS if k.lower() in t]
     return len(matches) >= 1, matches
 
 def offer_hash(text, sender_id):
@@ -121,7 +99,7 @@ def groq(system, user, max_tokens=200):
     try:
         r = requests.post(GROQ_URL,
             headers={"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"},
-            json={"model": "llama-3.3-70b-versatile",
+            json={"model": GROQ_MODEL,
                   "messages": [{"role": "system", "content": system},
                                 {"role": "user", "content": user}],
                   "max_tokens": max_tokens},
@@ -143,8 +121,6 @@ def make_kb(*rows):
 
 # ── Telethon: отправка сообщений ──────────────────────────────────────────────
 
-LAST_MSG_IDS_FILE = os.path.join(ROOT, "data", "last_msg_ids.json")
-SEND_RATE_LIMIT   = 15  # секунд между исходящими сообщениями клиентам
 _last_send_time   = 0.0
 
 def load_last_msg_ids():
@@ -166,8 +142,8 @@ def send_via_telethon(target, text):
     """Синхронная обёртка с rate limiting."""
     global _last_send_time
     elapsed = time.time() - _last_send_time
-    if elapsed < SEND_RATE_LIMIT:
-        wait = SEND_RATE_LIMIT - elapsed
+    if elapsed < SEND_RATE_LIMIT_SECONDS:
+        wait = SEND_RATE_LIMIT_SECONDS - elapsed
         log.info(f"Rate limit: жду {wait:.1f}с перед отправкой")
         time.sleep(wait)
 
@@ -265,7 +241,7 @@ def telethon_thread():
     async def run():
         global telethon_client, parser_running, owner_id
 
-        client = TelegramClient(SESSION_FILE, API_ID, API_HASH)
+        client = TelegramClient(SESSION_FILE, TELEGRAM_API_ID, TELEGRAM_API_HASH)
         telethon_client = client
         await client.start()
 
@@ -287,18 +263,18 @@ def telethon_thread():
                         log.error(f"Ошибка отправки {target}: {e}")
                 except Empty:
                     pass
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(SEND_QUEUE_POLL_SECONDS)
 
         # Сканирование истории — только новые с последнего запуска
         async def scan_history(entity, chat_name, chat_username):
             last_ids  = load_last_msg_ids()
             min_id    = last_ids.get(chat_username, 0)  # 0 = первый запуск
-            cutoff    = datetime.now(timezone.utc) - timedelta(hours=24)
+            cutoff    = datetime.now(timezone.utc) - timedelta(hours=HISTORY_SCAN_HOURS)
             count     = 0
             newest_id = min_id
 
-            # Лимит 100 сообщений за сессию — защита от FloodWait
-            async for msg in client.iter_messages(entity, limit=100, min_id=min_id):
+            # Лимит сообщений за сессию — защита от FloodWait
+            async for msg in client.iter_messages(entity, limit=HISTORY_SCAN_LIMIT, min_id=min_id):
                 if os.path.exists(STOP_FILE):
                     break
                 if not msg.date or msg.date < cutoff:
@@ -321,7 +297,7 @@ def telethon_thread():
                 process_offer(text, chat_name, chat_username, msg.id,
                               sid, fname, uname, msg.date.strftime("%d.%m %H:%M"), mentions)
                 count += 1
-                await asyncio.sleep(1.0)  # пауза между сообщениями
+                await asyncio.sleep(HISTORY_SCAN_DELAY_SECONDS)  # пауза между сообщениями
 
             # Сохраняем прогресс
             if newest_id > min_id:
