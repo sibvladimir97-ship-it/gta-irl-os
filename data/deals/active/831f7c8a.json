@@ -1,0 +1,140 @@
+{
+  "deal_id": "831f7c8a",
+  "offer_id": "edae1be2",
+  "created_at": "2026-06-26T14:54:18.105084",
+  "stage": "WAITING_REPLY",
+  "contact": {
+    "name": "Роман",
+    "username": "intraff",
+    "user_id": 2115617844,
+    "contact_url": "https://t.me/intraff"
+  },
+  "source": {
+    "chat": "Мари про вакансии — инфобизнес",
+    "msg_url": "https://t.me/mari_vakansii/5782917"
+  },
+  "offer_text": "#ищу #ассистент #помощник\n\nИщу ассистента по трафику.\n\nЯ, Роман, основатель студии YouTube-Рост, ищу ассистента по трафику для привлечения клиентов на сопровождение youtube-каналов.\n\nЗадача - искать клиентов онлайн и назначать им созвоны. \n\nУсловия: \n📅 Работа в будни по 2-3 часа.\n💸 Зарплата: 15 000 ₽ в месяц + 10% от сделок с приведенных вами клиентов.\n🎓 Желательно иметь опыт поиска клиентов через соц.сети.\n\nПишите в ЛС слово \"ассистент\": @intraff",
+  "messages": [
+    {
+      "direction": "outgoing",
+      "text": "Добрый день! Увидел вашу заявку, готов взяться. Вакансия ещё актуальна?",
+      "timestamp": "2026-06-26T14:54:24.864384"
+    }
+  ],
+  "notes": [],
+  "brief": {},
+  "proposal": null,
+  "payments": [],
+  "payment": {
+    "prepayment_status": "pending",
+    "prepayment_amount": null,
+    "prepayment_received_at": null,
+    "final_payment_status": "pending",
+    "final_payment_amount": null,
+    "final_payment_received_at": null
+  },
+  "execution": {
+    "mode": null,
+    "status": "not_started",
+    "planned_at": null,
+    "started_at": null,
+    "delivered_at": null
+  },
+  "followup": null,
+  "followups": [],
+  "events": [
+    {
+      "type": "deal_created",
+      "title": "Сделка создана",
+      "data": {
+        "offer_id": "edae1be2",
+        "stage": "NEW_LEAD"
+      },
+      "timestamp": "2026-06-26T14:54:18.105141"
+    },
+    {
+      "type": "stage_changed",
+      "title": "Стадия: 🆕 Новый лид → 🎯 Решено откликаться",
+      "data": {
+        "from": "NEW_LEAD",
+        "to": "RESPOND_DECIDED"
+      },
+      "timestamp": "2026-06-26T14:54:18.154986"
+    },
+    {
+      "type": "stage_changed",
+      "title": "Стадия: 🎯 Решено откликаться → ✏️ Черновик отклика готов",
+      "data": {
+        "from": "RESPOND_DECIDED",
+        "to": "FIRST_MESSAGE_DRAFTED"
+      },
+      "timestamp": "2026-06-26T14:54:18.156394"
+    },
+    {
+      "type": "stage_changed",
+      "title": "Стадия: ✏️ Черновик отклика готов → 📨 Первый отклик отправлен",
+      "data": {
+        "from": "FIRST_MESSAGE_DRAFTED",
+        "to": "FIRST_MESSAGE_SENT"
+      },
+      "timestamp": "2026-06-26T14:54:24.859325"
+    },
+    {
+      "type": "stage_changed",
+      "title": "Стадия: 📨 Первый отклик отправлен → ⏳ Ждём ответ клиента",
+      "data": {
+        "from": "FIRST_MESSAGE_SENT",
+        "to": "WAITING_REPLY"
+      },
+      "timestamp": "2026-06-26T14:54:24.863656"
+    },
+    {
+      "type": "message",
+      "title": "Исходящее сообщение",
+      "data": {
+        "direction": "outgoing",
+        "text": "Добрый день! Увидел вашу заявку, готов взяться. Вакансия ещё актуальна?"
+      },
+      "timestamp": "2026-06-26T14:54:24.864407"
+    }
+  ],
+  "loss": null,
+  "budget": null,
+  "deadline": null,
+  "result": null,
+  "stage_history": [
+    {
+      "from": null,
+      "to": "NEW_LEAD",
+      "at": "2026-06-26T14:54:18.105084",
+      "reason": "created"
+    },
+    {
+      "from": "NEW_LEAD",
+      "to": "RESPOND_DECIDED",
+      "at": "2026-06-26T14:54:18.154913",
+      "reason": "manual_update"
+    },
+    {
+      "from": "RESPOND_DECIDED",
+      "to": "FIRST_MESSAGE_DRAFTED",
+      "at": "2026-06-26T14:54:18.156321",
+      "reason": "manual_update"
+    },
+    {
+      "from": "FIRST_MESSAGE_DRAFTED",
+      "to": "FIRST_MESSAGE_SENT",
+      "at": "2026-06-26T14:54:24.859274",
+      "reason": "manual_update"
+    },
+    {
+      "from": "FIRST_MESSAGE_SENT",
+      "to": "WAITING_REPLY",
+      "at": "2026-06-26T14:54:24.863626",
+      "reason": "manual_update"
+    }
+  ],
+  "next_action": "Отследить входящий ответ или пометить клиента пропавшим.",
+  "updated_at": "2026-06-26T14:54:24.863636",
+  "draft": "Добрый день! Увидел вашу заявку, готов взяться. Вакансия ещё актуальна?"
+}

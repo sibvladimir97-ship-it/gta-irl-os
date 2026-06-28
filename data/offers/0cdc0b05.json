@@ -1,0 +1,26 @@
+{
+  "offer_id": "0cdc0b05",
+  "created_at": "2026-06-26T14:59:07.364299",
+  "status": "NEW",
+  "raw": {
+    "sender_id": 8605297346,
+    "sender_username": "AlexaUGCofAgency",
+    "chat_username": "mari_vakansii",
+    "msg_id": 5783413,
+    "msg_url": "https://t.me/mari_vakansii/5783413",
+    "contact_url": "https://t.me/AlexaUGCofAgency"
+  },
+  "raw_text": "#ищу #дизайнер #сайты\n\nИщу дизайнера, специалиста, который создаст сайт на taplink.\n\nТз пришлю в лс при отклике\n@AlexaUGCofAgency",
+  "display": {
+    "chat_name": "Мари про вакансии — инфобизнес",
+    "sender_name": "Александра UGC Креатор",
+    "date": "26.06 12:53",
+    "keywords": [
+      "#ищу"
+    ],
+    "ai_score": null,
+    "score": null,
+    "preview": "#ищу #дизайнер #сайты\n\nИщу дизайнера, специалиста, который создаст сайт на taplink.\n\nТз пришлю в лс при отклике\n@AlexaUGCofAgency"
+  },
+  "deal_id": null
+}

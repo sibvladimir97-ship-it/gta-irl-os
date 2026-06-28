@@ -1,0 +1,95 @@
+{
+  "deal_id": "e9d2f8c6",
+  "offer_id": "c744c9f9",
+  "created_at": "2026-06-26T14:29:58.225828",
+  "stage": "FIRST_MESSAGE_DRAFTED",
+  "contact": {
+    "name": "Бизнес-клуб Терра",
+    "username": "oporamanagerhr",
+    "user_id": 6337408268,
+    "contact_url": "https://t.me/oporamanagerhr"
+  },
+  "source": {
+    "chat": "Мари про вакансии — инфобизнес",
+    "msg_url": "https://t.me/mari_vakansii/5782855"
+  },
+  "offer_text": "#ищу #продажи #b2b #аккаунт #менеджерпродаж\n\nНужен **менеджер по продажам / аккаунт**: спокойно и системно вести клиентов бизнеса. **Удалёнка**, **гибкий график**, доход **% + бонусы**.\n\n**Что продаём\n\nA**I‑продукты и услуги: **контент‑завод**, **ИИ‑агенты**, **нейрофотосессии**, внедрения под задачи компании.\n\n**Как устроено обучение**\n\nВместо “прочитай 100 страниц” — **ИИ‑агент** по продуктовой линейке. Он помогает:\n\n- быстро понять “что кому подходит”\n- собирать аргументы под отрасль\n- готовить ответы на возражения\n\n**Задачи**\n\n- квалификация и ведение сделки\n- согласование пакета и условий\n- CRM, этапы, отчётность\n- удержание качества коммуникации и конверсии\n\n**Требования**\n\nОпыт продаж/аккаунтинга B2B, умение слушать, задавать вопросы и доводить до решения.\n\nПишите в личку @oporamanagerhr",
+  "messages": [],
+  "notes": [],
+  "brief": {},
+  "proposal": null,
+  "payments": [],
+  "payment": {
+    "prepayment_status": "pending",
+    "prepayment_amount": null,
+    "prepayment_received_at": null,
+    "final_payment_status": "pending",
+    "final_payment_amount": null,
+    "final_payment_received_at": null
+  },
+  "execution": {
+    "mode": null,
+    "status": "not_started",
+    "planned_at": null,
+    "started_at": null,
+    "delivered_at": null
+  },
+  "followup": null,
+  "followups": [],
+  "events": [
+    {
+      "type": "deal_created",
+      "title": "Сделка создана",
+      "data": {
+        "offer_id": "c744c9f9",
+        "stage": "NEW_LEAD"
+      },
+      "timestamp": "2026-06-26T14:29:58.225878"
+    },
+    {
+      "type": "stage_changed",
+      "title": "Стадия: 🆕 Новый лид → 🎯 Решено откликаться",
+      "data": {
+        "from": "NEW_LEAD",
+        "to": "RESPOND_DECIDED"
+      },
+      "timestamp": "2026-06-26T14:29:58.632118"
+    },
+    {
+      "type": "stage_changed",
+      "title": "Стадия: 🎯 Решено откликаться → ✏️ Черновик отклика готов",
+      "data": {
+        "from": "RESPOND_DECIDED",
+        "to": "FIRST_MESSAGE_DRAFTED"
+      },
+      "timestamp": "2026-06-26T14:29:58.632788"
+    }
+  ],
+  "loss": null,
+  "budget": null,
+  "deadline": null,
+  "result": null,
+  "stage_history": [
+    {
+      "from": null,
+      "to": "NEW_LEAD",
+      "at": "2026-06-26T14:29:58.225828",
+      "reason": "created"
+    },
+    {
+      "from": "NEW_LEAD",
+      "to": "RESPOND_DECIDED",
+      "at": "2026-06-26T14:29:58.632072",
+      "reason": "manual_update"
+    },
+    {
+      "from": "RESPOND_DECIDED",
+      "to": "FIRST_MESSAGE_DRAFTED",
+      "at": "2026-06-26T14:29:58.632762",
+      "reason": "manual_update"
+    }
+  ],
+  "next_action": "Проверить черновик и отправить только после подтверждения.",
+  "updated_at": "2026-06-26T14:29:58.632773",
+  "draft": "Здравствуйте, интересная заявка. Наш опыт работы с AI-агентами может оказаться полезным для вашей компании. Не могли бы вы уточнить, является ли заявка еще актуальной и есть ли возможность обсудить детали дальше?"
+}

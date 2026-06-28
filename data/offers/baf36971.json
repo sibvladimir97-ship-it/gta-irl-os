@@ -1,0 +1,29 @@
+{
+  "offer_id": "baf36971",
+  "created_at": "2026-06-26T14:38:45.975277",
+  "status": "RESPONDED",
+  "raw": {
+    "sender_id": 123456789,
+    "sender_username": "test_contact",
+    "chat_username": "test",
+    "msg_id": 999999,
+    "msg_url": "https://t.me/test/999999",
+    "contact_url": "https://t.me/test_contact"
+  },
+  "raw_text": "#ищу разработчик Python бот. Нужен Telegram бот для автоматизации. Бюджет 5000 руб. Пишите @test_contact",
+  "display": {
+    "chat_name": "Тест",
+    "sender_name": "Тестовый клиент",
+    "date": "26.06 21:00",
+    "keywords": [
+      "#ищу",
+      "разработчик",
+      "бот"
+    ],
+    "ai_score": null,
+    "score": null,
+    "preview": "#ищу разработчик Python бот. Нужен Telegram бот для автоматизации. Бюджет 5000 руб. Пишите @test_contact"
+  },
+  "deal_id": "e1c2e891",
+  "updated_at": "2026-06-26T14:58:19.196835"
+}

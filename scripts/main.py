@@ -86,6 +86,18 @@ def is_offer(text):
 def offer_hash(text, sender_id):
     return hashlib.md5(f"{sender_id}:{text[:100]}".encode()).hexdigest()
 
+def kb_to_dict(kb):
+    """Конвертирует InlineKeyboardMarkup в JSON-сериализуемый dict."""
+    if kb is None:
+        return None
+    if isinstance(kb, dict):
+        return kb
+    # telebot InlineKeyboardMarkup → dict
+    rows = []
+    for row in kb.keyboard:
+        rows.append([{"text": btn.text, "callback_data": btn.callback_data} for btn in row])
+    return {"inline_keyboard": rows}
+
 def send_to_owner(text, keyboard=None):
     if not owner_id:
         return
@@ -96,7 +108,7 @@ def send_to_owner(text, keyboard=None):
         "disable_web_page_preview": True,
     }
     if keyboard:
-        payload["reply_markup"] = keyboard
+        payload["reply_markup"] = kb_to_dict(keyboard)
     try:
         requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
                       json=payload, timeout=10)
@@ -162,17 +174,21 @@ def process_offer(text, chat_name, chat_username, msg_id, sender_id,
     contact_url = (f"https://t.me/{best_username}" if best_username
                    else f"tg://user?id={sender_id}" if sender_id else None)
 
-    score = groq(
-        "Оцени фриланс-оффер для Владимира (Python, боты, AI, монтаж). "
-        "Ответь 4 строками: ⚡Реализуемость / 💰Бюджет / ⏱Срок / 📌Брать?",
-        text[:400], max_tokens=100
-    )
+    # Rule-based скоринг — без AI, без API-запросов
+    from offer_scoring import score_offer, format_score
+    rule_score = score_offer(text, keywords)
+    score_text = format_score(rule_score)
+
+    # Не показываем офферы с вердиктом "не брать" (скам, низкая релевантность)
+    if rule_score["verdict"] == "не брать":
+        log.info(f"Пропущен (не брать): {text[:50]}")
+        return
 
     offer = create_offer(
         raw_text=text, chat_name=chat_name, chat_username=chat_username,
         msg_id=msg_id, sender_id=sender_id, sender_name=sender_name,
         sender_username=best_username, msg_date=msg_date,
-        keywords=keywords, ai_score=score,
+        keywords=keywords, ai_score=score_text,
     )
     offer["raw"]["contact_url"]   = contact_url
     offer["raw"]["all_mentions"]  = all_mentions
@@ -356,12 +372,15 @@ def telethon_thread():
                         update_stage(deal, "WAITING_REPLY")
                         update_stage(deal, "CLIENT_REPLIED")
 
-                    next_q = groq(
-                        "Ты ведёшь переговоры по фриланс-заказу. Задай ОДИН короткий вопрос "
-                        "чтобы уточнить бюджет или дедлайн. Только вопрос, без пояснений.",
-                        f"Клиент написал: {text}\nЗаказ: {deal['offer_text'][:300]}",
-                        max_tokens=80
-                    ) or "Понял! Подскажите бюджет и сроки?"
+                    # Шаблонный следующий вопрос — без AI
+                    has_budget  = deal.get("budget")
+                    has_deadline = deal.get("deadline")
+                    if not has_budget:
+                        next_q = "Отлично! Подскажите, какой у вас бюджет на задачу?"
+                    elif not has_deadline:
+                        next_q = "Понял! В какие сроки нужно выполнить?"
+                    else:
+                        next_q = "Готов взяться. Работаю по предоплате 50%. Когда готовы начать?"
 
                     deal["draft"] = next_q
                     save_deal(deal)
@@ -523,25 +542,52 @@ def handle_callback(call):
             bot.edit_message_reply_markup(chat_id, msg_id, reply_markup=None)
 
         elif action == "respond":
-            bot.answer_callback_query(call.id, "⏳ Генерирую черновик...")
+            bot.answer_callback_query(call.id, "✅ Черновик готов")
             deal = create_deal(offer)
             update_offer(rest, status="RESPONDED", deal_id=deal["deal_id"])
             update_stage(deal, "RESPOND_DECIDED")
             update_stage(deal, "FIRST_MESSAGE_DRAFTED")
 
-            draft = draft_first_message(deal)
+            # Шаблонный черновик — без AI, мгновенно
+            contact_name = offer["display"].get("sender_name", "")
+            draft = f"Добрый день{', ' + contact_name if contact_name else ''}! Увидел вашу заявку — всё ещё актуально?"
             deal["draft"] = draft
             save_deal(deal)
 
             did = deal["deal_id"]
             kb  = make_kb(
                 [("✅ Отправить", f"send_draft:{did}"),
+                 ("✏️ AI-улучшить", f"ai_draft:{did}"),
                  ("❌ Отменить",  f"cancel_draft:{did}")],
             )
             bot.edit_message_reply_markup(chat_id, msg_id, reply_markup=None)
             bot.send_message(chat_id,
-                f"✏️ *Черновик*\nСделка `{did}`\n\n{draft}\n\nОтправить клиенту?",
+                f"✏️ *Черновик*\nСделка `{did}`\n\n{draft}\n\nОтправить или улучшить через AI?",
                 parse_mode="Markdown", reply_markup=kb)
+
+    # ── AI-улучшение черновика по запросу ──
+    elif action == "ai_draft":
+        deal = get_deal(rest)
+        if not deal:
+            bot.answer_callback_query(call.id, "❌ Сделка не найдена")
+            return
+        bot.answer_callback_query(call.id, "⏳ Улучшаю через AI...")
+        improved = groq(
+            "Напиши короткий первый отклик на фриланс-заявку от имени Владимира. "
+            "2-3 предложения. Вежливо, по-русски. Уточни актуальность.",
+            f"Заявка:\n{deal['offer_text'][:400]}", max_tokens=150
+        ) or deal.get("draft", "")
+        deal["draft"] = improved
+        save_deal(deal)
+        did = rest
+        kb = make_kb(
+            [("✅ Отправить", f"send_draft:{did}"),
+             ("❌ Отменить",  f"cancel_draft:{did}")],
+        )
+        bot.edit_message_text(
+            f"✏️ *AI-черновик*\nСделка `{did}`\n\n{improved}\n\nОтправить?",
+            chat_id, msg_id, parse_mode="Markdown", reply_markup=kb
+        )
 
     # ── Отправка черновика ──
     elif action == "send_draft":

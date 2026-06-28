@@ -1,0 +1,95 @@
+{
+  "deal_id": "73396097",
+  "offer_id": "1968f2e9",
+  "created_at": "2026-06-26T14:43:11.835924",
+  "stage": "FIRST_MESSAGE_DRAFTED",
+  "contact": {
+    "name": "Ксюша",
+    "username": "kelseyplague",
+    "user_id": 1036210056,
+    "contact_url": "https://t.me/kelseyplague"
+  },
+  "source": {
+    "chat": "Мари про вакансии — инфобизнес",
+    "msg_url": "https://t.me/mari_vakansii/5782935"
+  },
+  "offer_text": "#ищу #закупка #реклама #трафик\n\nИщу человека, который поможет закупить рекламу у блогеров в инстаграм (нативная реклама, рекомендации, репост рилсов приоритет) \n\nС кейсами и ценами пишите в ЛС @kelseyplague",
+  "messages": [],
+  "notes": [],
+  "brief": {},
+  "proposal": null,
+  "payments": [],
+  "payment": {
+    "prepayment_status": "pending",
+    "prepayment_amount": null,
+    "prepayment_received_at": null,
+    "final_payment_status": "pending",
+    "final_payment_amount": null,
+    "final_payment_received_at": null
+  },
+  "execution": {
+    "mode": null,
+    "status": "not_started",
+    "planned_at": null,
+    "started_at": null,
+    "delivered_at": null
+  },
+  "followup": null,
+  "followups": [],
+  "events": [
+    {
+      "type": "deal_created",
+      "title": "Сделка создана",
+      "data": {
+        "offer_id": "1968f2e9",
+        "stage": "NEW_LEAD"
+      },
+      "timestamp": "2026-06-26T14:43:11.835976"
+    },
+    {
+      "type": "stage_changed",
+      "title": "Стадия: 🆕 Новый лид → 🎯 Решено откликаться",
+      "data": {
+        "from": "NEW_LEAD",
+        "to": "RESPOND_DECIDED"
+      },
+      "timestamp": "2026-06-26T14:43:11.839440"
+    },
+    {
+      "type": "stage_changed",
+      "title": "Стадия: 🎯 Решено откликаться → ✏️ Черновик отклика готов",
+      "data": {
+        "from": "RESPOND_DECIDED",
+        "to": "FIRST_MESSAGE_DRAFTED"
+      },
+      "timestamp": "2026-06-26T14:43:12.135996"
+    }
+  ],
+  "loss": null,
+  "budget": null,
+  "deadline": null,
+  "result": null,
+  "stage_history": [
+    {
+      "from": null,
+      "to": "NEW_LEAD",
+      "at": "2026-06-26T14:43:11.835924",
+      "reason": "created"
+    },
+    {
+      "from": "NEW_LEAD",
+      "to": "RESPOND_DECIDED",
+      "at": "2026-06-26T14:43:11.839412",
+      "reason": "manual_update"
+    },
+    {
+      "from": "RESPOND_DECIDED",
+      "to": "FIRST_MESSAGE_DRAFTED",
+      "at": "2026-06-26T14:43:12.135942",
+      "reason": "manual_update"
+    }
+  ],
+  "next_action": "Проверить черновик и отправить только после подтверждения.",
+  "updated_at": "2026-06-26T14:43:12.135967",
+  "draft": "Здравствуйте, я Владимир. Меня заинтересовала ваша заявка на закупку рекламы у блогеров в Инстаграме. Не могли бы вы уточнить, в какой стадии проекта вы сейчас находитесь и что конкретно вам необходимо для его реализации?"
+}

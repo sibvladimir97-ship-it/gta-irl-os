@@ -1,0 +1,95 @@
+{
+  "deal_id": "1a17deb3",
+  "offer_id": "f010c516",
+  "created_at": "2026-06-26T14:41:46.832679",
+  "stage": "FIRST_MESSAGE_DRAFTED",
+  "contact": {
+    "name": "ve4ka",
+    "username": null,
+    "user_id": 8001315218,
+    "contact_url": "tg://user?id=8001315218"
+  },
+  "source": {
+    "chat": "Мари про вакансии — инфобизнес",
+    "msg_url": "https://t.me/mari_vakansii/5782918"
+  },
+  "offer_text": "#ищу #вакансия #удаленка \n\n🚀 Администратор-куратор \n\nПриглашаем в команду активных и ответственных людей.\n\nЧто предстоит делать:\n📩 Обрабатывать входящие обращения\n📢 Размещать объявления\n💬 Консультировать клиентов по готовым материалам\n🎓 Выдавать доступ к обучению\n\nДля работы потребуется:\n📱 Смартфон или планшет\n🌐 Стабильный интернет\n\nУсловия:\n✅ Можно без опыта\n✅ Обучение предоставляется\n✅ Оплата высокая. 90 тысяч в месяц не предел.\n✅ Занятость от 2–3 часов в день\n\n📩 За подробностями обращайтесь в личные сообщения.",
+  "messages": [],
+  "notes": [],
+  "brief": {},
+  "proposal": null,
+  "payments": [],
+  "payment": {
+    "prepayment_status": "pending",
+    "prepayment_amount": null,
+    "prepayment_received_at": null,
+    "final_payment_status": "pending",
+    "final_payment_amount": null,
+    "final_payment_received_at": null
+  },
+  "execution": {
+    "mode": null,
+    "status": "not_started",
+    "planned_at": null,
+    "started_at": null,
+    "delivered_at": null
+  },
+  "followup": null,
+  "followups": [],
+  "events": [
+    {
+      "type": "deal_created",
+      "title": "Сделка создана",
+      "data": {
+        "offer_id": "f010c516",
+        "stage": "NEW_LEAD"
+      },
+      "timestamp": "2026-06-26T14:41:46.832721"
+    },
+    {
+      "type": "stage_changed",
+      "title": "Стадия: 🆕 Новый лид → 🎯 Решено откликаться",
+      "data": {
+        "from": "NEW_LEAD",
+        "to": "RESPOND_DECIDED"
+      },
+      "timestamp": "2026-06-26T14:41:47.210040"
+    },
+    {
+      "type": "stage_changed",
+      "title": "Стадия: 🎯 Решено откликаться → ✏️ Черновик отклика готов",
+      "data": {
+        "from": "RESPOND_DECIDED",
+        "to": "FIRST_MESSAGE_DRAFTED"
+      },
+      "timestamp": "2026-06-26T14:41:47.211097"
+    }
+  ],
+  "loss": null,
+  "budget": null,
+  "deadline": null,
+  "result": null,
+  "stage_history": [
+    {
+      "from": null,
+      "to": "NEW_LEAD",
+      "at": "2026-06-26T14:41:46.832679",
+      "reason": "created"
+    },
+    {
+      "from": "NEW_LEAD",
+      "to": "RESPOND_DECIDED",
+      "at": "2026-06-26T14:41:47.209929",
+      "reason": "manual_update"
+    },
+    {
+      "from": "RESPOND_DECIDED",
+      "to": "FIRST_MESSAGE_DRAFTED",
+      "at": "2026-06-26T14:41:47.211047",
+      "reason": "manual_update"
+    }
+  ],
+  "next_action": "Проверить черновик и отправить только после подтверждения.",
+  "updated_at": "2026-06-26T14:41:47.211069",
+  "draft": "Здравствуйте! Заинтересовался вашей заявкой об администраторе-кураторе. Подскажите, актуально ли пока это предложение и какие именно навыки вы считаете наиболее важными для этой позиции?"
+}

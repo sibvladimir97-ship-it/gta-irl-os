@@ -761,6 +761,8 @@ def handle_callback(call):
     chat_id = call.message.chat.id
     msg_id = call.message.message_id
 
+    print(f"[CALLBACK] data={data!r} chat={chat_id}")
+
     try:
         action, offer_id = data.split(":", 1)
     except:
@@ -1019,16 +1021,18 @@ def handle_callback(call):
     elif action == "send_draft":
         parts = offer_id.split(":", 1)
         deal_id = parts[0]
-        real_offer_id = parts[1] if len(parts) > 1 else None
 
+        print(f"[DEBUG] send_draft: deal_id={deal_id}")
         deal = get_deal(deal_id)
         if not deal:
             bot.answer_callback_query(call.id, "❌ Сделка не найдена")
+            bot.send_message(chat_id, f"❌ Сделка {deal_id} не найдена в active/")
             return
 
         draft = deal.get("draft", "")
-        contact_url = deal["contact"].get("contact_url", "")
         username = deal["contact"].get("username")
+        user_id = deal["contact"].get("user_id")
+        print(f"[DEBUG] contact: username={username}, user_id={user_id}, draft_len={len(draft)}")
 
         bot.answer_callback_query(call.id, "📨 Отправляю...")
 

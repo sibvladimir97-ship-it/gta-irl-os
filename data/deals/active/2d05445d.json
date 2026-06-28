@@ -1,0 +1,95 @@
+{
+  "deal_id": "2d05445d",
+  "offer_id": "9b9e0b61",
+  "created_at": "2026-06-26T14:31:40.021698",
+  "stage": "FIRST_MESSAGE_DRAFTED",
+  "contact": {
+    "name": "Е",
+    "username": "eka_marketing26",
+    "user_id": 6355002923,
+    "contact_url": "https://t.me/eka_marketing26"
+  },
+  "source": {
+    "chat": "Мари про вакансии — инфобизнес",
+    "msg_url": "https://t.me/mari_vakansii/5782869"
+  },
+  "offer_text": "#ищу #вакансия #виральныйконтент #продюсер\n\nищем **viral creative producer / контент стратег по виральности **в международный ai-продукт видео редактор.\n\nмы строим контент-завод: систему работы с креаторами, короткими видео и органическим ростом через reels / tiktok / shorts / pinterest.\n\nнужен человек, который понимает, **почему одни ролики залетают, а другие нет**, умеет находить рабочие форматы, придумывать сильные хуки и превращать идеи в понятные тз для креаторов.\n\n**что нужно делать:**\n\n▪️ анализировать ролики, тренды, конкурентов и результаты прошлой недели\n▪️ искать viral formats, hooks, references для коротких видео\n▪️ формировать гипотезы для тестирования\n▪️ придумывать идеи, хуки, cta и сценарные механики\n▪️ готовить тз для креаторов\n▪️ давать фидбек по драфтам\n▪️ делать weekly review: что сработало, что нет, что тестируем дальше\n\n**важно:**\n\n▪️ опыт с reels / tiktok / shorts\n▪️ понимание viral-механик, retention, hooks, shareability\n▪️ умение смотреть на цифры и делать выводы \n▪️ насмотренность, хороший вкус и сильное чувство контента. делать так чтобы наши ролики залетали\n▪️ самостоятельность и инициативность\n▪️ английский язык — обязательно, команда международная\n\n**будет плюсом:**\n\n▪️ опыт в influencer marketing / ugc / performance creatives\n▪️ опыт с ai-продуктами, saas или creator economy\n▪️ использование ai-инструментов для поиска идей и создания контента\n\nважно: это **не smm-менеджер** и не координатор проектов.\nне нужно заниматься публикациями, дедлайнами и операционкой.\n\nосновная задача — понимать, **какой контент может залететь, почему он должен сработать и как улучшать результаты от недели к неделе**.\n\n**формат:**\n\n▪️ remote\n▪️ international team\n▪️ part-time или full-time\n▪️ оплата обсуждается индивидуально\n\nесли интересно — присылайте в личные сообщения:\n\n— коротко о себе\n— кейсы / портфолио с результатами и залетами видео на 10М + просмотров \n— релевантные ссылки на проекты\n— ожидания по оплате\n\nписать: @eka_marketing26",
+  "messages": [],
+  "notes": [],
+  "brief": {},
+  "proposal": null,
+  "payments": [],
+  "payment": {
+    "prepayment_status": "pending",
+    "prepayment_amount": null,
+    "prepayment_received_at": null,
+    "final_payment_status": "pending",
+    "final_payment_amount": null,
+    "final_payment_received_at": null
+  },
+  "execution": {
+    "mode": null,
+    "status": "not_started",
+    "planned_at": null,
+    "started_at": null,
+    "delivered_at": null
+  },
+  "followup": null,
+  "followups": [],
+  "events": [
+    {
+      "type": "deal_created",
+      "title": "Сделка создана",
+      "data": {
+        "offer_id": "9b9e0b61",
+        "stage": "NEW_LEAD"
+      },
+      "timestamp": "2026-06-26T14:31:40.021741"
+    },
+    {
+      "type": "stage_changed",
+      "title": "Стадия: 🆕 Новый лид → 🎯 Решено откликаться",
+      "data": {
+        "from": "NEW_LEAD",
+        "to": "RESPOND_DECIDED"
+      },
+      "timestamp": "2026-06-26T14:31:40.432423"
+    },
+    {
+      "type": "stage_changed",
+      "title": "Стадия: 🎯 Решено откликаться → ✏️ Черновик отклика готов",
+      "data": {
+        "from": "RESPOND_DECIDED",
+        "to": "FIRST_MESSAGE_DRAFTED"
+      },
+      "timestamp": "2026-06-26T14:31:40.433010"
+    }
+  ],
+  "loss": null,
+  "budget": null,
+  "deadline": null,
+  "result": null,
+  "stage_history": [
+    {
+      "from": null,
+      "to": "NEW_LEAD",
+      "at": "2026-06-26T14:31:40.021698",
+      "reason": "created"
+    },
+    {
+      "from": "NEW_LEAD",
+      "to": "RESPOND_DECIDED",
+      "at": "2026-06-26T14:31:40.432386",
+      "reason": "manual_update"
+    },
+    {
+      "from": "RESPOND_DECIDED",
+      "to": "FIRST_MESSAGE_DRAFTED",
+      "at": "2026-06-26T14:31:40.432987",
+      "reason": "manual_update"
+    }
+  ],
+  "next_action": "Проверить черновик и отправить только после подтверждения.",
+  "updated_at": "2026-06-26T14:31:40.432997",
+  "draft": "Добрый день! Увидел вашу заявку, готов взяться. Вакансия ещё актуальна?"
+}
