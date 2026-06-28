@@ -39,6 +39,7 @@ from telegram_risk import (
     format_telegram_risk_summary,
     log_telegram_event,
 )
+from phase1_report import format_phase1_report
 from offer_store import create_offer, get_offer, update_offer
 from negotiator import (
     create_deal, get_deal, save_deal, update_stage, add_message,
@@ -386,45 +387,88 @@ def telethon_thread():
                 sid     = sender.id
                 if sid == me.id:
                     return
-                sname   = getattr(sender, "first_name", "") or getattr(sender, "username", "?")
+                sname = getattr(sender, "first_name", "") or getattr(sender, "username", "?")
             except:
                 return
 
-            # Ищем активную сделку
-            for deal in list_deals():
-                if deal.get("stage") in ["CLOSED_WON", "CLOSED_LOST", "SCAM"]:
+            # Ищем активную сделку по sender_id
+            deal = None
+            for d in list_deals():
+                if d.get("stage") in ["CLOSED_WON", "CLOSED_LOST", "SCAM", "CLIENT_GHOSTED"]:
                     continue
-                cid = deal.get("contact", {}).get("user_id")
-                if cid and int(cid) == int(sid):
-                    add_message(deal, "incoming", text)
-                    if deal.get("stage") == "FIRST_MESSAGE_SENT":
-                        update_stage(deal, "WAITING_REPLY")
-                        update_stage(deal, "CLIENT_REPLIED")
-
-                    # Шаблонный следующий вопрос — без AI
-                    has_budget  = deal.get("budget")
-                    has_deadline = deal.get("deadline")
-                    if not has_budget:
-                        next_q = "Отлично! Подскажите, какой у вас бюджет на задачу?"
-                    elif not has_deadline:
-                        next_q = "Понял! В какие сроки нужно выполнить?"
-                    else:
-                        next_q = "Готов взяться. Работаю по предоплате 50%. Когда готовы начать?"
-
-                    deal["draft"] = next_q
-                    save_deal(deal)
-                    did = deal["deal_id"]
-
-                    kb = make_kb(
-                        [("✅ Отправить", f"send_reply:{did}"),
-                         ("❌ Пропустить", f"skip_reply:{did}")],
-                    )
-                    send_to_owner(
-                        f"📨 *Ответ клиента*\nСделка `{did}`\n👤 {sname}\n\n_{text[:300]}_"
-                        f"\n\n✏️ *Черновик:*\n{next_q}\n\nОтправить?",
-                        kb
-                    )
+                if str(d.get("contact", {}).get("user_id", "")) == str(sid):
+                    deal = d
                     break
+            if not deal:
+                return
+
+            deal_id = deal["deal_id"]
+            stage   = deal.get("stage", "")
+
+            # Логируем и извлекаем данные из текста
+            add_message(deal, "incoming", text)
+            from negotiator import update_brief_from_text
+            changed = update_brief_from_text(deal, text)
+
+            # Обновляем стадию
+            if stage in ["FIRST_MESSAGE_SENT", "WAITING_REPLY"]:
+                update_stage(deal, "CLIENT_REPLIED")
+                update_stage(deal, "QUALIFYING")
+
+            # Что уже собрали
+            brief    = deal.get("brief", {})
+            budget   = deal.get("budget") or brief.get("budget")
+            deadline = deal.get("deadline") or brief.get("deadline")
+            scope    = brief.get("scope") or brief.get("description")
+
+            # Следующий шаг воронки
+            if not budget:
+                next_q     = "Отлично! Подскажите, какой бюджет на задачу?"
+                next_stage = "QUALIFYING"
+            elif not deadline:
+                next_q     = "Понял! В какие сроки нужно выполнить?"
+                next_stage = "QUALIFYING"
+            elif not scope:
+                next_q     = "Хорошо! Опишите подробнее что именно нужно сделать?"
+                next_stage = "QUALIFYING"
+            else:
+                # Всё собрано → КП с предоплатой
+                next_q = (
+                    f"Отлично, всё понял!\n\n"
+                    f"Стоимость: {budget}\n"
+                    f"Срок: {deadline}\n\n"
+                    f"Работаю по предоплате 50%. "
+                    f"Как удобно оплатить? (карта РФ / крипта / Thai Baht)"
+                )
+                next_stage = "PROPOSAL_SENT"
+
+            deal["draft"]      = next_q
+            deal["next_stage"] = next_stage
+            save_deal(deal)
+
+            # Что извлекли из сообщения
+            changed_txt = ""
+            if changed:
+                parts = []
+                if changed.get("budget"):   parts.append(f"💰 {changed['budget']}")
+                if changed.get("deadline"): parts.append(f"⏰ {changed['deadline']}")
+                if changed.get("scope"):    parts.append("📋 ТЗ")
+                if parts:
+                    changed_txt = "\n" + " · ".join(parts)
+
+            stage_lbl = STAGE_LABELS.get(deal.get("stage", ""), "")
+            kb = make_kb(
+                [("✅ Отправить", f"send_reply:{deal_id}"),
+                 ("❌ Пропустить", f"skip_reply:{deal_id}")],
+            )
+            send_to_owner(
+                f"📨 *Ответ клиента*\n"
+                f"Сделка `{deal_id}` · {stage_lbl}\n"
+                f"👤 {sname}{changed_txt}\n\n"
+                f"_{text[:300]}_\n\n"
+                f"✏️ *Черновик:*\n{next_q}\n\nОтправить?",
+                kb
+            )
 
         asyncio.ensure_future(process_send_queue())
         await start_parser()
@@ -440,6 +484,7 @@ def cmd_start(msg):
     bot.send_message(msg.chat.id,
         "👋 *GTA IRL OS*\n\n"
         "/collapse — состояние системы\n"
+        "/report — дневной Phase 1 отчёт\n"
         "/deals — активные сделки\n"
         "/ai_usage — расход AI за сегодня\n"
         "/telegram_risk — риск Telegram/FloodWait\n"
@@ -485,6 +530,10 @@ def cmd_collapse(msg):
             f"Офферов в базе: {len(list(os.listdir(os.path.join(ROOT, 'data', 'offers'))))}")
     bot.send_message(msg.chat.id, text, parse_mode="Markdown")
 
+@bot.message_handler(commands=["report"])
+def cmd_report(msg):
+    bot.send_message(msg.chat.id, format_phase1_report(), parse_mode="Markdown")
+
 @bot.message_handler(commands=["ai_usage"])
 def cmd_ai_usage(msg):
     bot.send_message(msg.chat.id, format_ai_usage_summary(), parse_mode="Markdown")
@@ -493,9 +542,61 @@ def cmd_ai_usage(msg):
 def cmd_telegram_risk(msg):
     bot.send_message(msg.chat.id, format_telegram_risk_summary(), parse_mode="Markdown")
 
+@bot.message_handler(commands=["report"])
+def cmd_report(msg):
+    offers = list(os.listdir(os.path.join(ROOT, "data", "offers")))
+    deals  = list_deals()
+
+    by_status = {}
+    for f in offers:
+        try:
+            o = json.load(open(os.path.join(ROOT, "data", "offers", f)))
+            s = o.get("status", "NEW")
+            by_status[s] = by_status.get(s, 0) + 1
+        except:
+            pass
+
+    by_stage = {}
+    prepaid  = 0
+    for d in deals:
+        s = d.get("stage", "")
+        by_stage[s] = by_stage.get(s, 0) + 1
+        if s in ["PREPAYMENT_RECEIVED", "EXECUTION_PLANNING", "CLOSED_WON"]:
+            prepaid += 1
+
+    total = len(offers)
+    scam  = by_status.get("SCAM", 0)
+    resp  = by_status.get("RESPONDED", 0)
+
+    lines = [
+        f"📊 *Отчёт GTA IRL OS*",
+        f"_{datetime.now().strftime('%d.%m.%Y %H:%M')}_",
+        f"",
+        f"*Офферы:*",
+        f"├ Найдено: `{total}`",
+        f"├ Скам/скрыто: `{scam + by_status.get('HIDDEN', 0)}`",
+        f"├ Откликнулся: `{resp}`",
+        f"└ Делегировано: `{by_status.get('DELEGATED', 0)}`",
+        f"",
+        f"*Сделки:*",
+        f"├ Всего: `{len(deals)}`",
+        f"├ Ждём ответа: `{by_stage.get('WAITING_REPLY', 0) + by_stage.get('CLIENT_REPLIED', 0)}`",
+        f"├ Квалификация: `{by_stage.get('QUALIFYING', 0)}`",
+        f"├ КП отправлено: `{by_stage.get('PROPOSAL_SENT', 0)}`",
+        f"├ Ждём предоплату: `{by_stage.get('PREPAYMENT_WAITING', 0)}`",
+        f"└ 💰 Предоплата получена: `{prepaid}`",
+        f"",
+        f"*Конверсия:*",
+        f"└ Оффер → отклик: `{round(resp/total*100) if total else 0}%`",
+    ]
+    bot.send_message(msg.chat.id, "\n".join(lines), parse_mode="Markdown")
+
+
+
 @bot.message_handler(commands=["reset"])
 def cmd_reset(msg):
     bot.send_message(msg.chat.id, "✅ История сброшена.")
+
 
 @bot.message_handler(content_types=["voice"])
 def handle_voice(msg):
@@ -679,19 +780,75 @@ def handle_callback(call):
         if not deal:
             bot.answer_callback_query(call.id, "❌ Сделка не найдена")
             return
-        draft    = deal.get("draft", "")
-        username = deal["contact"].get("username")
-        user_id  = deal["contact"].get("user_id")
-        target   = username or user_id
+        draft      = deal.get("draft", "")
+        username   = deal["contact"].get("username")
+        user_id    = deal["contact"].get("user_id")
+        target     = username or user_id
+        next_stage = deal.get("next_stage")
 
         bot.answer_callback_query(call.id, "📨 Отправляю...")
         ok, err = send_via_telethon(target, draft)
         if ok:
             add_message(deal, "outgoing", draft)
-            bot.edit_message_reply_markup(chat_id, msg_id, reply_markup=None)
-            bot.send_message(chat_id, "✅ Ответ отправлен.", parse_mode="Markdown")
+            # Переходим на следующую стадию если определена
+            if next_stage and next_stage != deal.get("stage"):
+                try:
+                    update_stage(deal, next_stage)
+                except:
+                    pass
+            # Если КП отправлено — переходим к ожиданию предоплаты
+            if deal.get("stage") == "PROPOSAL_SENT":
+                try:
+                    update_stage(deal, "PREPAYMENT_WAITING")
+                except:
+                    pass
+                kb_prepay = make_kb(
+                    [("💳 Предоплата получена", f"prepay:{rest}"),
+                     ("👻 Клиент пропал",       f"ghost:{rest}")],
+                )
+                bot.send_message(chat_id,
+                    f"📋 КП отправлено! Сделка `{rest}` → ⏳ ждём предоплату.\n\n"
+                    f"Когда придёт — нажми кнопку.",
+                    parse_mode="Markdown", reply_markup=kb_prepay)
+            else:
+                bot.edit_message_reply_markup(chat_id, msg_id, reply_markup=None)
+                bot.send_message(chat_id, "✅ Отправлено.", parse_mode="Markdown")
         else:
             bot.send_message(chat_id, f"❌ Ошибка: {err}")
+
+    elif action == "prepay":
+        deal = get_deal(rest)
+        if not deal:
+            bot.answer_callback_query(call.id, "❌")
+            return
+        bot.answer_callback_query(call.id, "💰 Предоплата!")
+        try:
+            update_stage(deal, "PREPAYMENT_RECEIVED")
+        except:
+            pass
+        deal["prepayment_received_at"] = datetime.now().isoformat()
+        save_deal(deal)
+        bot.edit_message_reply_markup(chat_id, msg_id, reply_markup=None)
+        bot.send_message(chat_id,
+            f"💰 *Предоплата получена!*\nСделка `{rest}` — в работу!\n\n"
+            f"Клиент: {deal['contact'].get('name', '?')}\n"
+            f"Бюджет: {deal.get('budget', '—')}\n"
+            f"Срок: {deal.get('deadline', '—')}",
+            parse_mode="Markdown")
+
+    elif action == "ghost":
+        deal = get_deal(rest)
+        if not deal:
+            bot.answer_callback_query(call.id, "❌")
+            return
+        bot.answer_callback_query(call.id, "👻 Клиент пропал")
+        try:
+            update_stage(deal, "CLIENT_GHOSTED")
+        except:
+            pass
+        save_deal(deal)
+        bot.edit_message_reply_markup(chat_id, msg_id, reply_markup=None)
+        bot.send_message(chat_id, f"👻 Сделка `{rest}` — клиент пропал.")
 
     elif action == "skip_reply":
         bot.answer_callback_query(call.id, "⏭ Пропущено")
