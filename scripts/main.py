@@ -143,8 +143,34 @@ def make_kb(*rows):
 
 # ── Telethon: отправка сообщений ──────────────────────────────────────────────
 
+LAST_MSG_IDS_FILE = os.path.join(ROOT, "data", "last_msg_ids.json")
+SEND_RATE_LIMIT   = 15  # секунд между исходящими сообщениями клиентам
+_last_send_time   = 0.0
+
+def load_last_msg_ids():
+    if os.path.exists(LAST_MSG_IDS_FILE):
+        try:
+            return json.load(open(LAST_MSG_IDS_FILE))
+        except:
+            pass
+    return {}
+
+def save_last_msg_id(chat_username, msg_id):
+    ids = load_last_msg_ids()
+    ids[chat_username] = msg_id
+    os.makedirs(os.path.dirname(LAST_MSG_IDS_FILE), exist_ok=True)
+    json.dump(ids, open(LAST_MSG_IDS_FILE, "w"))
+
+
 def send_via_telethon(target, text):
-    """Синхронная обёртка — ставит задачу в очередь и ждёт результат."""
+    """Синхронная обёртка с rate limiting."""
+    global _last_send_time
+    elapsed = time.time() - _last_send_time
+    if elapsed < SEND_RATE_LIMIT:
+        wait = SEND_RATE_LIMIT - elapsed
+        log.info(f"Rate limit: жду {wait:.1f}с перед отправкой")
+        time.sleep(wait)
+
     result_event = threading.Event()
     result_box   = [None]
 
@@ -154,6 +180,7 @@ def send_via_telethon(target, text):
 
     send_queue.put((target, text, callback))
     result_event.wait(timeout=30)
+    _last_send_time = time.time()
     return result_box[0] or (False, "timeout")
 
 
@@ -262,15 +289,22 @@ def telethon_thread():
                     pass
                 await asyncio.sleep(0.5)
 
-        # Сканирование истории
+        # Сканирование истории — только новые с последнего запуска
         async def scan_history(entity, chat_name, chat_username):
-            cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-            count = 0
-            async for msg in client.iter_messages(entity, limit=500):
+            last_ids  = load_last_msg_ids()
+            min_id    = last_ids.get(chat_username, 0)  # 0 = первый запуск
+            cutoff    = datetime.now(timezone.utc) - timedelta(hours=24)
+            count     = 0
+            newest_id = min_id
+
+            # Лимит 100 сообщений за сессию — защита от FloodWait
+            async for msg in client.iter_messages(entity, limit=100, min_id=min_id):
                 if os.path.exists(STOP_FILE):
                     break
                 if not msg.date or msg.date < cutoff:
                     break
+                if msg.id > newest_id:
+                    newest_id = msg.id
                 text = msg.text or ""
                 if len(text) < 30:
                     continue
@@ -287,7 +321,13 @@ def telethon_thread():
                 process_offer(text, chat_name, chat_username, msg.id,
                               sid, fname, uname, msg.date.strftime("%d.%m %H:%M"), mentions)
                 count += 1
-                await asyncio.sleep(1.5)
+                await asyncio.sleep(1.0)  # пауза между сообщениями
+
+            # Сохраняем прогресс
+            if newest_id > min_id:
+                save_last_msg_id(chat_username, newest_id)
+                log.info(f"Прогресс сохранён: @{chat_username} до msg_id={newest_id}")
+
             return count
 
         # Новые сообщения в каналах
@@ -665,4 +705,4 @@ if __name__ == "__main__":
     log.info("Bot polling started")
 
     # Telebot polling — единственный getUpdates
-    bot.infinity_polling(allowed_updates=["message", "callback_query"])
+    bot.infinity_polling(allowed_updates=["message", "callback_query"], timeout=30, long_polling_timeout=30)
