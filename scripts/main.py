@@ -33,7 +33,7 @@ from config import (
     SEND_RATE_LIMIT_SECONDS, HISTORY_SCAN_LIMIT, HISTORY_SCAN_HOURS,
     HISTORY_SCAN_DELAY_SECONDS, SEND_QUEUE_POLL_SECONDS,
 )
-from ai_service import ask_ai, transcribe_audio
+from ai_service import ask_ai, format_ai_usage_summary, transcribe_audio
 from offer_store import create_offer, get_offer, update_offer
 from negotiator import (
     create_deal, get_deal, save_deal, update_stage, add_message,
@@ -412,6 +412,7 @@ def cmd_start(msg):
         "👋 *GTA IRL OS*\n\n"
         "/collapse — состояние системы\n"
         "/deals — активные сделки\n"
+        "/ai_usage — расход AI за сегодня\n"
         "/стоп — остановить парсер\n"
         "/старт — запустить парсер\n\n"
         "Или просто напиши что угодно.", parse_mode="Markdown")
@@ -453,6 +454,10 @@ def cmd_collapse(msg):
             f"Сделок активных: {len(active)}\n"
             f"Офферов в базе: {len(list(os.listdir(os.path.join(ROOT, 'data', 'offers'))))}")
     bot.send_message(msg.chat.id, text, parse_mode="Markdown")
+
+@bot.message_handler(commands=["ai_usage"])
+def cmd_ai_usage(msg):
+    bot.send_message(msg.chat.id, format_ai_usage_summary(), parse_mode="Markdown")
 
 @bot.message_handler(commands=["reset"])
 def cmd_reset(msg):

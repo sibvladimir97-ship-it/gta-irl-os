@@ -8,7 +8,7 @@ Every attempted call is logged locally without secrets.
 
 import json
 import os
-from datetime import datetime
+from datetime import datetime, date
 
 import requests
 
@@ -128,3 +128,97 @@ def transcribe_audio(audio_data, language="ru", purpose="voice_transcription", m
             "error_type": type(error).__name__,
         })
         return None
+
+
+def load_ai_usage(day=None):
+    """Load local AI usage records for a day."""
+    if day is None:
+        day = date.today().isoformat()
+    if isinstance(day, date):
+        day = day.isoformat()
+
+    path = os.path.join(AI_USAGE_DIR, f"{day}.jsonl")
+    if not os.path.exists(path):
+        return []
+
+    records = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                records.append(json.loads(line))
+            except json.JSONDecodeError:
+                records.append({
+                    "timestamp": "",
+                    "provider": "unknown",
+                    "model": "unknown",
+                    "purpose": "corrupt_log_line",
+                    "status": "error",
+                    "meta": {},
+                })
+    return records
+
+
+def ai_usage_summary(day=None):
+    """Return aggregate AI usage stats for reporting."""
+    records = load_ai_usage(day)
+    summary = {
+        "total": len(records),
+        "by_status": {},
+        "by_purpose": {},
+        "by_model": {},
+        "estimated_prompt_chars": 0,
+        "estimated_reply_chars": 0,
+        "estimated_audio_bytes": 0,
+    }
+    for record in records:
+        status = record.get("status") or "unknown"
+        purpose = record.get("purpose") or "unknown"
+        model = record.get("model") or "unknown"
+        meta = record.get("meta") or {}
+
+        summary["by_status"][status] = summary["by_status"].get(status, 0) + 1
+        summary["by_purpose"][purpose] = summary["by_purpose"].get(purpose, 0) + 1
+        summary["by_model"][model] = summary["by_model"].get(model, 0) + 1
+        summary["estimated_prompt_chars"] += int(meta.get("user_chars") or 0)
+        summary["estimated_reply_chars"] += int(meta.get("reply_chars") or 0)
+        summary["estimated_audio_bytes"] += int(meta.get("audio_bytes") or 0)
+    return summary
+
+
+def format_ai_usage_summary(day=None):
+    """Format AI usage summary for Telegram."""
+    report_day = day.isoformat() if isinstance(day, date) else (day or date.today().isoformat())
+    summary = ai_usage_summary(report_day)
+    lines = [
+        f"🤖 *AI usage — {report_day}*",
+        f"Всего попыток: `{summary['total']}`",
+    ]
+
+    if summary["by_status"]:
+        lines.append("\n*Статусы:*")
+        for status, count in sorted(summary["by_status"].items()):
+            lines.append(f"• {status}: `{count}`")
+
+    if summary["by_purpose"]:
+        lines.append("\n*Назначение:*")
+        for purpose, count in sorted(summary["by_purpose"].items(), key=lambda item: item[1], reverse=True):
+            lines.append(f"• {purpose}: `{count}`")
+
+    if summary["by_model"]:
+        lines.append("\n*Модели:*")
+        for model, count in sorted(summary["by_model"].items()):
+            lines.append(f"• {model}: `{count}`")
+
+    lines.append(
+        "\n*Оценка объёма:*"
+        f"\nPrompt chars: `{summary['estimated_prompt_chars']}`"
+        f"\nReply chars: `{summary['estimated_reply_chars']}`"
+        f"\nAudio bytes: `{summary['estimated_audio_bytes']}`"
+    )
+
+    if summary["total"] == 0:
+        lines.append("\nAI сегодня не использовался.")
+    return "\n".join(lines)
