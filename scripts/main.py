@@ -33,13 +33,11 @@ from config import (
     SEND_RATE_LIMIT_SECONDS, HISTORY_SCAN_LIMIT, HISTORY_SCAN_HOURS,
     HISTORY_SCAN_DELAY_SECONDS, SEND_QUEUE_POLL_SECONDS,
 )
-from ai_service import ask_ai, format_ai_usage_summary, transcribe_audio
+from ai_service import ask_ai, transcribe_audio
 from telegram_risk import (
     classify_telegram_error,
-    format_telegram_risk_summary,
     log_telegram_event,
 )
-from phase1_report import format_phase1_report
 from offer_store import create_offer, get_offer, update_offer
 from negotiator import (
     create_deal, get_deal, save_deal, update_stage, add_message,
@@ -529,18 +527,6 @@ def cmd_collapse(msg):
             f"Сделок активных: {len(active)}\n"
             f"Офферов в базе: {len(list(os.listdir(os.path.join(ROOT, 'data', 'offers'))))}")
     bot.send_message(msg.chat.id, text, parse_mode="Markdown")
-
-@bot.message_handler(commands=["report"])
-def cmd_report(msg):
-    bot.send_message(msg.chat.id, format_phase1_report(), parse_mode="Markdown")
-
-@bot.message_handler(commands=["ai_usage"])
-def cmd_ai_usage(msg):
-    bot.send_message(msg.chat.id, format_ai_usage_summary(), parse_mode="Markdown")
-
-@bot.message_handler(commands=["telegram_risk"])
-def cmd_telegram_risk(msg):
-    bot.send_message(msg.chat.id, format_telegram_risk_summary(), parse_mode="Markdown")
 
 @bot.message_handler(commands=["report"])
 def cmd_report(msg):
