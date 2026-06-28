@@ -43,6 +43,7 @@ from negotiator import (
     create_deal, get_deal, save_deal, update_stage, add_message,
     draft_first_message, list_deals, format_deal_card
 )
+from deal_pipeline import STAGE_LABELS
 
 # Глобальные переменные
 bot          = telebot.TeleBot(BOT_TOKEN)
@@ -867,6 +868,8 @@ def handle_callback(call):
         username = contact.get("username")
         user_id  = contact.get("user_id")
         name     = contact.get("name", "?")
+        stage    = STAGE_LABELS.get(deal.get("stage", ""), deal.get("stage", ""))
+
         if username:
             link = f"https://t.me/{username}"
         elif user_id:
@@ -874,11 +877,17 @@ def handle_callback(call):
         else:
             bot.answer_callback_query(call.id, "❌ Нет контакта")
             return
+
         bot.answer_callback_query(call.id, "Открываю чат...")
+        # Без Markdown — чистый текст + ссылка отдельно
         bot.send_message(chat_id,
-            f"💬 Переписка с *{name}*\n{link}\n\n"
-            f"Сделка `{rest}` · {STAGE_LABELS.get(deal.get('stage',''), '')}",
-            parse_mode="Markdown", disable_web_page_preview=False)
+            f"Сделка {rest}\n"
+            f"Клиент: {name}\n"
+            f"Стадия: {stage}\n"
+            f"Бюджет: {deal.get('budget', '—')}\n"
+            f"Срок: {deal.get('deadline', '—')}\n\n"
+            f"Переписка: {link}",
+            disable_web_page_preview=False)
 
     elif action == "prepay":
         deal = get_deal(rest)
