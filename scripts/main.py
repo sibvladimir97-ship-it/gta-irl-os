@@ -34,6 +34,11 @@ from config import (
     HISTORY_SCAN_DELAY_SECONDS, SEND_QUEUE_POLL_SECONDS,
 )
 from ai_service import ask_ai, format_ai_usage_summary, transcribe_audio
+from telegram_risk import (
+    classify_telegram_error,
+    format_telegram_risk_summary,
+    log_telegram_event,
+)
 from offer_store import create_offer, get_offer, update_offer
 from negotiator import (
     create_deal, get_deal, save_deal, update_stage, add_message,
@@ -79,6 +84,7 @@ def kb_to_dict(kb):
 
 def send_to_owner(text, keyboard=None):
     if not owner_id:
+        log_telegram_event("bot_send", status="skipped", channel="owner", meta={"reason": "missing_owner_id"})
         return
     payload = {
         "chat_id": owner_id,
@@ -89,9 +95,14 @@ def send_to_owner(text, keyboard=None):
     if keyboard:
         payload["reply_markup"] = kb_to_dict(keyboard)
     try:
-        requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-                      json=payload, timeout=10)
+        response = requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                                 json=payload, timeout=10)
+        log_telegram_event("bot_send", status="ok" if response.ok else "error", channel="owner", meta={
+            "status_code": response.status_code,
+            "text_chars": len(text or ""),
+        })
     except Exception as e:
+        log_telegram_event("bot_send", status="error", channel="owner", meta=classify_telegram_error(e))
         log.error(f"send_to_owner: {e}")
 
 def make_kb(*rows):
@@ -129,6 +140,7 @@ def send_via_telethon(target, text):
     if elapsed < SEND_RATE_LIMIT_SECONDS:
         wait = SEND_RATE_LIMIT_SECONDS - elapsed
         log.info(f"Rate limit: жду {wait:.1f}с перед отправкой")
+        log_telegram_event("rate_wait", status="ok", channel="telethon", meta={"wait_seconds": round(wait, 2)})
         time.sleep(wait)
 
     result_event = threading.Event()
@@ -141,7 +153,14 @@ def send_via_telethon(target, text):
     send_queue.put((target, text, callback))
     result_event.wait(timeout=30)
     _last_send_time = time.time()
-    return result_box[0] or (False, "timeout")
+    if result_box[0] is None:
+        log_telegram_event("telethon_send", status="error", channel="client", meta={
+            "error_type": "Timeout",
+            "target_type": "username" if isinstance(target, str) else "user_id",
+            "text_chars": len(text or ""),
+        })
+        return (False, "timeout")
+    return result_box[0]
 
 
 # ── Парсинг оффера ────────────────────────────────────────────────────────────
@@ -241,9 +260,19 @@ def telethon_thread():
                     try:
                         await client.send_message(target, text)
                         cb(True, None)
+                        log_telegram_event("telethon_send", status="ok", channel="client", meta={
+                            "target_type": "username" if isinstance(target, str) else "user_id",
+                            "text_chars": len(text or ""),
+                        })
                         log.info(f"Отправлено: {target}")
                     except Exception as e:
                         cb(False, str(e))
+                        meta = classify_telegram_error(e)
+                        meta.update({
+                            "target_type": "username" if isinstance(target, str) else "user_id",
+                            "text_chars": len(text or ""),
+                        })
+                        log_telegram_event("telethon_send", status="error", channel="client", meta=meta)
                         log.error(f"Ошибка отправки {target}: {e}")
                 except Empty:
                     pass
@@ -413,6 +442,7 @@ def cmd_start(msg):
         "/collapse — состояние системы\n"
         "/deals — активные сделки\n"
         "/ai_usage — расход AI за сегодня\n"
+        "/telegram_risk — риск Telegram/FloodWait\n"
         "/стоп — остановить парсер\n"
         "/старт — запустить парсер\n\n"
         "Или просто напиши что угодно.", parse_mode="Markdown")
@@ -458,6 +488,10 @@ def cmd_collapse(msg):
 @bot.message_handler(commands=["ai_usage"])
 def cmd_ai_usage(msg):
     bot.send_message(msg.chat.id, format_ai_usage_summary(), parse_mode="Markdown")
+
+@bot.message_handler(commands=["telegram_risk"])
+def cmd_telegram_risk(msg):
+    bot.send_message(msg.chat.id, format_telegram_risk_summary(), parse_mode="Markdown")
 
 @bot.message_handler(commands=["reset"])
 def cmd_reset(msg):

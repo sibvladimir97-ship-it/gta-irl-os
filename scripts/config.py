@@ -14,6 +14,7 @@ SESSION_FILE = os.path.join(ROOT, "scripts", "parser_session")
 STOP_FILE = os.path.join(ROOT, "scripts", ".parser_stop")
 LAST_MSG_IDS_FILE = os.path.join(ROOT, "data", "last_msg_ids.json")
 AI_USAGE_DIR = os.path.join(ROOT, "data", "ai_usage")
+TELEGRAM_EVENTS_DIR = os.path.join(ROOT, "data", "telegram_events")
 
 BOT_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 GROQ_KEY = os.getenv("GROQ_API_KEY", "")
@@ -48,6 +49,8 @@ OFFER_EXCLUDE = [
 
 # Telegram safety defaults.
 SEND_RATE_LIMIT_SECONDS = int(os.getenv("SEND_RATE_LIMIT_SECONDS", "15"))
+TELEGRAM_DAILY_SEND_LIMIT = int(os.getenv("TELEGRAM_DAILY_SEND_LIMIT", "40"))
+TELEGRAM_DAILY_ERROR_LIMIT = int(os.getenv("TELEGRAM_DAILY_ERROR_LIMIT", "5"))
 HISTORY_SCAN_LIMIT = int(os.getenv("HISTORY_SCAN_LIMIT", "100"))
 HISTORY_SCAN_HOURS = int(os.getenv("HISTORY_SCAN_HOURS", "24"))
 HISTORY_SCAN_DELAY_SECONDS = float(os.getenv("HISTORY_SCAN_DELAY_SECONDS", "1.0"))
