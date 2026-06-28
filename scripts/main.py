@@ -27,12 +27,13 @@ from telethon import TelegramClient, events
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import (
     ROOT, SESSION_FILE, STOP_FILE, LAST_MSG_IDS_FILE,
-    BOT_TOKEN, GROQ_KEY, TELEGRAM_API_ID, TELEGRAM_API_HASH,
-    GROQ_URL, GROQ_MODEL, BOT_USERNAME, MONITOR_CHATS,
+    BOT_TOKEN, TELEGRAM_API_ID, TELEGRAM_API_HASH,
+    BOT_USERNAME, MONITOR_CHATS,
     OFFER_KEYWORDS, OFFER_EXCLUDE,
     SEND_RATE_LIMIT_SECONDS, HISTORY_SCAN_LIMIT, HISTORY_SCAN_HOURS,
     HISTORY_SCAN_DELAY_SECONDS, SEND_QUEUE_POLL_SECONDS,
 )
+from ai_service import ask_ai, transcribe_audio
 from offer_store import create_offer, get_offer, update_offer
 from negotiator import (
     create_deal, get_deal, save_deal, update_stage, add_message,
@@ -92,23 +93,6 @@ def send_to_owner(text, keyboard=None):
                       json=payload, timeout=10)
     except Exception as e:
         log.error(f"send_to_owner: {e}")
-
-def groq(system, user, max_tokens=200):
-    if not GROQ_KEY:
-        return None
-    try:
-        r = requests.post(GROQ_URL,
-            headers={"Authorization": f"Bearer {GROQ_KEY}", "Content-Type": "application/json"},
-            json={"model": GROQ_MODEL,
-                  "messages": [{"role": "system", "content": system},
-                                {"role": "user", "content": user}],
-                  "max_tokens": max_tokens},
-            timeout=15)
-        if r.status_code == 429:
-            return None
-        return r.json()["choices"][0]["message"]["content"]
-    except:
-        return None
 
 def make_kb(*rows):
     """Создаёт InlineKeyboardMarkup из списков кнопок."""
@@ -486,16 +470,20 @@ def handle_voice(msg):
         fi  = bot.get_file(msg.voice.file_id)
         url = f"https://api.telegram.org/file/bot{BOT_TOKEN}/{fi.file_path}"
         audio = requests.get(url).content
-        r = requests.post("https://api.groq.com/openai/v1/audio/transcriptions",
-            headers={"Authorization": f"Bearer {GROQ_KEY}"},
-            files={"file": ("voice.ogg", audio, "audio/ogg")},
-            data={"model": "whisper-large-v3-turbo", "language": "ru"}, timeout=30)
-        r.raise_for_status()
-        text = r.json().get("text", "").strip()
+        text = transcribe_audio(audio, purpose="telegram_voice", meta={
+            "chat_type": msg.chat.type,
+            "user_id": getattr(msg.from_user, "id", None),
+        })
         if not text:
             bot.edit_message_text("❌ Не распознал.", msg.chat.id, thinking.message_id)
             return
-        reply = groq("Ты ассистент GTA IRL OS Владимира. Отвечай кратко по-русски.", text, max_tokens=300) or text
+        reply = ask_ai(
+            "Ты ассистент GTA IRL OS Владимира. Отвечай кратко по-русски.",
+            text,
+            max_tokens=300,
+            purpose="telegram_voice_reply",
+            meta={"user_id": getattr(msg.from_user, "id", None)},
+        ) or text
         bot.edit_message_text(f"🎤 _{text}_\n\n{reply}", msg.chat.id, thinking.message_id, parse_mode="Markdown")
     except Exception as e:
         bot.edit_message_text(f"❌ {e}", msg.chat.id, thinking.message_id)
@@ -513,7 +501,13 @@ def handle_text(msg):
         text = text.replace(f"@{BOT_USERNAME}", "").strip()
 
     thinking = bot.send_message(msg.chat.id, "⏳", reply_to_message_id=msg.message_id)
-    reply = groq("Ты ассистент GTA IRL OS Владимира. Отвечай кратко по-русски.", text, max_tokens=500)
+    reply = ask_ai(
+        "Ты ассистент GTA IRL OS Владимира. Отвечай кратко по-русски.",
+        text,
+        max_tokens=500,
+        purpose="telegram_text_reply",
+        meta={"user_id": getattr(msg.from_user, "id", None), "chat_type": msg.chat.type},
+    )
     if reply:
         bot.edit_message_text(reply, msg.chat.id, thinking.message_id)
     else:
@@ -588,10 +582,13 @@ def handle_callback(call):
             bot.answer_callback_query(call.id, "❌ Сделка не найдена")
             return
         bot.answer_callback_query(call.id, "⏳ Улучшаю через AI...")
-        improved = groq(
+        improved = ask_ai(
             "Напиши короткий первый отклик на фриланс-заявку от имени Владимира. "
             "2-3 предложения. Вежливо, по-русски. Уточни актуальность.",
-            f"Заявка:\n{deal['offer_text'][:400]}", max_tokens=150
+            f"Заявка:\n{deal['offer_text'][:400]}",
+            max_tokens=150,
+            purpose="improve_first_draft",
+            meta={"deal_id": rest},
         ) or deal.get("draft", "")
         deal["draft"] = improved
         save_deal(deal)

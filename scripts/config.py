@@ -13,6 +13,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SESSION_FILE = os.path.join(ROOT, "scripts", "parser_session")
 STOP_FILE = os.path.join(ROOT, "scripts", ".parser_stop")
 LAST_MSG_IDS_FILE = os.path.join(ROOT, "data", "last_msg_ids.json")
+AI_USAGE_DIR = os.path.join(ROOT, "data", "ai_usage")
 
 BOT_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
 GROQ_KEY = os.getenv("GROQ_API_KEY", "")
@@ -20,7 +21,9 @@ TELEGRAM_API_ID = int(os.getenv("TELEGRAM_API_ID", "0"))
 TELEGRAM_API_HASH = os.getenv("TELEGRAM_API_HASH", "")
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_TRANSCRIBE_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 GROQ_MODEL = "llama-3.3-70b-versatile"
+GROQ_TRANSCRIBE_MODEL = "whisper-large-v3-turbo"
 BOT_USERNAME = os.getenv("BOT_USERNAME", "gta_irl_assistant_bot")
 
 MONITOR_CHATS = [
