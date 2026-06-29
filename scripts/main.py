@@ -804,12 +804,24 @@ def handle_callback(call):
         bot.answer_callback_query(call.id, "📨 Отправляю...")
         ok, err = send_via_telethon(target, draft)
         if ok:
-            update_stage(deal, "FIRST_MESSAGE_SENT")
-            update_stage(deal, "WAITING_REPLY")
             add_message(deal, "outgoing", draft)
+            try:
+                update_stage(deal, "FIRST_MESSAGE_SENT")
+                update_stage(deal, "WAITING_REPLY")
+            except:
+                pass
             bot.edit_message_reply_markup(chat_id, msg_id, reply_markup=None)
-            bot.send_message(chat_id, f"✅ Отправлено! Сделка `{rest}` → ⏳ ждём ответ.",
-                             parse_mode="Markdown")
+            # После отправки — кнопки для продолжения
+            did = rest
+            name = deal["contact"].get("name", "клиент")
+            kb = make_kb(
+                [("📨 Написать снова", f"open_chat:{did}"),
+                 ("💳 Предоплата",     f"prepay:{did}"),
+                 ("👻 Пропал",         f"ghost:{did}")],
+            )
+            bot.send_message(chat_id,
+                f"✅ Отправлено {name}!\n\nКогда ответит — нажми «Написать снова» чтобы продолжить воронку.",
+                reply_markup=kb)
         else:
             bot.send_message(chat_id, f"❌ Ошибка: {err}")
 
@@ -868,26 +880,55 @@ def handle_callback(call):
         username = contact.get("username")
         user_id  = contact.get("user_id")
         name     = contact.get("name", "?")
-        stage    = STAGE_LABELS.get(deal.get("stage", ""), deal.get("stage", ""))
+        stage    = deal.get("stage", "")
+        target   = username or user_id
 
-        if username:
-            link = f"https://t.me/{username}"
-        elif user_id:
-            link = f"tg://user?id={user_id}"
-        else:
+        if not target:
             bot.answer_callback_query(call.id, "❌ Нет контакта")
             return
 
-        bot.answer_callback_query(call.id, "Открываю чат...")
-        # Без Markdown — чистый текст + ссылка отдельно
+        bot.answer_callback_query(call.id, "⏳ Генерирую черновик...")
+
+        # Генерируем черновик исходя из стадии
+        msgs = deal.get("messages", [])
+        if not msgs:
+            # Первое сообщение — отклик
+            draft = f"Добрый день{', ' + name if name and name != '?' else ''}! Увидел вашу заявку — всё ещё актуально?"
+            update_stage(deal, "RESPOND_DECIDED")
+            update_stage(deal, "FIRST_MESSAGE_DRAFTED")
+        else:
+            # Продолжение — следующий вопрос воронки
+            budget   = deal.get("budget") or deal.get("brief", {}).get("budget")
+            deadline = deal.get("deadline") or deal.get("brief", {}).get("deadline")
+            scope    = deal.get("brief", {}).get("scope")
+            if not budget:
+                draft = "Подскажите, какой бюджет на задачу?"
+            elif not deadline:
+                draft = "В какие сроки нужно выполнить?"
+            elif not scope:
+                draft = "Опишите подробнее что именно нужно сделать?"
+            else:
+                draft = (f"Готов взяться!\n\nСтоимость: {budget}\nСрок: {deadline}\n\n"
+                        f"Работаю по предоплате 50%. Как удобно оплатить?")
+
+        deal["draft"] = draft
+        save_deal(deal)
+
+        # Ссылка на контакт для перехода
+        link = f"https://t.me/{username}" if username else f"tg://user?id={user_id}"
+        stage_lbl = STAGE_LABELS.get(deal.get("stage",""), "")
+
+        kb = make_kb(
+            [("✅ Отправить", f"send_draft:{rest}"),
+             ("❌ Отменить",  f"cancel_draft:{rest}")],
+        )
         bot.send_message(chat_id,
-            f"Сделка {rest}\n"
             f"Клиент: {name}\n"
-            f"Стадия: {stage}\n"
-            f"Бюджет: {deal.get('budget', '—')}\n"
-            f"Срок: {deal.get('deadline', '—')}\n\n"
-            f"Переписка: {link}",
-            disable_web_page_preview=False)
+            f"Контакт: {link}\n"
+            f"Стадия: {stage_lbl}\n"
+            f"Бюджет: {deal.get('budget') or '—'} · Срок: {deal.get('deadline') or '—'}\n\n"
+            f"Черновик:\n{draft}\n\nОтправить?",
+            reply_markup=kb)
 
     elif action == "prepay":
         deal = get_deal(rest)
