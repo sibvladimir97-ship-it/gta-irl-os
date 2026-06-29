@@ -390,12 +390,20 @@ def telethon_thread():
             except:
                 return
 
-            # Ищем активную сделку по sender_id
+            # Ищем сделку по user_id ИЛИ username
             deal = None
             for d in list_deals():
                 if d.get("stage") in ["CLOSED_WON", "CLOSED_LOST", "SCAM", "CLIENT_GHOSTED"]:
                     continue
-                if str(d.get("contact", {}).get("user_id", "")) == str(sid):
+                contact = d.get("contact", {})
+                # Матчим по user_id
+                if str(contact.get("user_id", "")) == str(sid):
+                    deal = d
+                    break
+                # Матчим по username
+                uname = contact.get("username", "")
+                sender_uname = getattr(sender, "username", "") or ""
+                if uname and sender_uname and uname.lower() == sender_uname.lower():
                     deal = d
                     break
             if not deal:
