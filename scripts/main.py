@@ -478,18 +478,33 @@ def telethon_thread():
 
 # ── Bot handlers ──────────────────────────────────────────────────────────────
 
-@bot.message_handler(commands=["start", "help"])
+@bot.message_handler(commands=["start", "help", "меню", "menu"])
 def cmd_start(msg):
+    deals = list_deals()
+    terminal = ["CLOSED_WON", "CLOSED_LOST", "SCAM", "CLIENT_GHOSTED"]
+    active  = [d for d in deals if d.get("stage") not in terminal]
+    waiting = [d for d in active if d.get("stage") in ["WAITING_REPLY", "CLIENT_REPLIED"]]
+    no_msg  = [d for d in active if len(d.get("messages", [])) == 0]
+    parser_on = not os.path.exists(STOP_FILE)
+    status = "🟢 работает" if parser_on else "🔴 остановлен"
+    offers_total = len(list(os.listdir(os.path.join(ROOT, "data", "offers"))))
+    kb = make_kb(
+        [("📋 Сделки",        "menu:deals"),
+         ("🎯 Офферы",        "menu:offers")],
+        [("📊 Отчёт",         "menu:report"),
+         ("📨 Написать всем", "menu:blast")],
+        [("▶️ Парсер старт",  "menu:parser_on"),
+         ("⏹ Парсер стоп",   "menu:parser_off")],
+        [("📈 Статус",        "menu:status")],
+    )
     bot.send_message(msg.chat.id,
-        "👋 *GTA IRL OS*\n\n"
-        "/collapse — состояние системы\n"
-        "/report — дневной Phase 1 отчёт\n"
-        "/deals — активные сделки\n"
-        "/ai_usage — расход AI за сегодня\n"
-        "/telegram_risk — риск Telegram/FloodWait\n"
-        "/стоп — остановить парсер\n"
-        "/старт — запустить парсер\n\n"
-        "Или просто напиши что угодно.", parse_mode="Markdown")
+        f"🎮 GTA IRL OS\n\n"
+        f"Парсер: {status}\n"
+        f"Офферов: {offers_total}\n"
+        f"Сделок активных: {len(active)}\n"
+        f"Ждут ответа: {len(waiting)}\n"
+        f"Не написали: {len(no_msg)}",
+        reply_markup=kb)
 
 @bot.message_handler(commands=["стоп", "stop"])
 def cmd_stop(msg):
@@ -711,6 +726,121 @@ def handle_callback(call):
     except:
         bot.answer_callback_query(call.id, "❌")
         return
+
+    # ── Меню ──
+    if action == "menu":
+        if rest == "deals":
+            cmd_deals(call.message)
+        elif rest == "report":
+            cmd_report(call.message)
+        elif rest == "status":
+            cmd_collapse(call.message)
+        elif rest == "parser_on":
+            if os.path.exists(STOP_FILE):
+                os.remove(STOP_FILE)
+            bot.answer_callback_query(call.id, "▶️ Парсер запущен")
+            bot.send_message(chat_id, "▶️ Парсер запущен. Сканирую каналы...")
+        elif rest == "parser_off":
+            open(STOP_FILE, 'w').close()
+            bot.answer_callback_query(call.id, "⏹ Парсер остановлен")
+            bot.send_message(chat_id, "⏹ Парсер остановлен.")
+        elif rest == "offers":
+            # Показываем последние 5 новых офферов
+            import glob
+            files = sorted(glob.glob(os.path.join(ROOT, "data", "offers", "*.json")),
+                          key=os.path.getmtime, reverse=True)
+            shown = 0
+            for f in files:
+                try:
+                    o = json.load(open(f))
+                    if o.get("status") != "NEW":
+                        continue
+                    if shown >= 5:
+                        break
+                    oid = o["offer_id"]
+                    d = o["display"]
+                    raw = o["raw"]
+                    username = raw.get("sender_username")
+                    sender_id = raw.get("sender_id")
+                    name = d.get("sender_name", "?")
+                    if username:
+                        contact = f"https://t.me/{username}"
+                    elif sender_id:
+                        contact = f"tg://user?id={sender_id}"
+                    else:
+                        contact = "нет"
+                    preview = (d.get("preview","") or "")[:200]
+                    kb2 = make_kb(
+                        [("✅ Откликнуться", f"respond:{oid}"),
+                         ("🚫 Скам",         f"scam:{oid}")],
+                        [("👁 Скрыть",       f"hide:{oid}")],
+                    )
+                    bot.send_message(chat_id,
+                        f"Оффер {oid}\n{d.get('chat_name','')}\n{contact}\n\n{preview}",
+                        reply_markup=kb2)
+                    shown += 1
+                except:
+                    pass
+            if shown == 0:
+                bot.send_message(chat_id, "Новых офферов нет.")
+        elif rest == "blast":
+            # Написать всем кому не писали
+            deals = list_deals()
+            terminal = ["CLOSED_WON","CLOSED_LOST","SCAM","CLIENT_GHOSTED"]
+            to_write = [d for d in deals
+                       if d.get("stage") not in terminal
+                       and len(d.get("messages",[])) == 0]
+            if not to_write:
+                bot.answer_callback_query(call.id, "Все уже написано!")
+                bot.send_message(chat_id, "✅ Всем уже написано.")
+                return
+            bot.answer_callback_query(call.id, f"Пишу {len(to_write)} людям...")
+            kb2 = make_kb(
+                [("✅ Подтвердить", "blast:confirm"),
+                 ("❌ Отмена",      "blast:cancel")],
+            )
+            names = "\n".join([f"• {d['contact'].get('name','?')} @{d['contact'].get('username','?')}"
+                               for d in to_write[:10]])
+            bot.send_message(chat_id,
+                f"Отправить первые сообщения {len(to_write)} людям?\n\n{names}",
+                reply_markup=kb2)
+
+    # ── Массовая отправка ──
+    elif action == "blast":
+        if rest == "cancel":
+            bot.answer_callback_query(call.id, "Отменено")
+            bot.edit_message_reply_markup(chat_id, msg_id, reply_markup=None)
+        elif rest == "confirm":
+            bot.answer_callback_query(call.id, "⏳ Отправляю...")
+            bot.edit_message_reply_markup(chat_id, msg_id, reply_markup=None)
+            deals = list_deals()
+            terminal = ["CLOSED_WON","CLOSED_LOST","SCAM","CLIENT_GHOSTED"]
+            to_write = [d for d in deals
+                       if d.get("stage") not in terminal
+                       and len(d.get("messages",[])) == 0]
+            sent = 0
+            for d in to_write:
+                c = d.get("contact", {})
+                username = c.get("username")
+                user_id  = c.get("user_id")
+                name     = (c.get("name","") or "").split()[0]
+                target   = username or user_id
+                if not target:
+                    continue
+                draft = (f"Добрый день, {name}! Увидел вашу заявку — всё ещё актуально?"
+                         if name else
+                         "Добрый день! Увидел вашу заявку — всё ещё актуально?")
+                ok, err = send_via_telethon(target, draft)
+                if ok:
+                    add_message(d, "outgoing", draft)
+                    try: update_stage(d, "FIRST_MESSAGE_SENT")
+                    except: pass
+                    try: update_stage(d, "WAITING_REPLY")
+                    except: pass
+                    sent += 1
+                else:
+                    bot.send_message(chat_id, f"❌ {c.get('name','?')}: {err}")
+            bot.send_message(chat_id, f"✅ Отправлено {sent} из {len(to_write)}")
 
     # ── Оффер ──
     if action in ("scam", "hide", "delegate", "respond"):
@@ -988,4 +1118,9 @@ if __name__ == "__main__":
     log.info("Bot polling started")
 
     # Telebot polling — единственный getUpdates
-    bot.infinity_polling(allowed_updates=["message", "callback_query"], timeout=30, long_polling_timeout=30)
+    while True:
+        try:
+            bot.infinity_polling(allowed_updates=["message", "callback_query"], timeout=20, long_polling_timeout=20)
+        except Exception as e:
+            log.error(f"Polling error: {e} — перезапуск через 5 сек")
+            time.sleep(5)
